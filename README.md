@@ -66,6 +66,14 @@ python -m minutes.pipeline --audio meeting.m4a --profile secure
 # Phase 3: n8n 오케스트레이션 (Docker)
 docker compose up -d --build         # n8n(:5678) + ollama(:11434)
 # → ./data/inbox 에 오디오 투입 → ./data/out/{secure,internal}/ 에 회의록
+
+# Phase 4: Vexa 봇 (회의 자동 참석 → 내장 전사 → 회의록)
+python -m minutes.bot request  --platform google_meet --meeting abc-defg-hij   # 봇 참석
+python -m minutes.bot ingest   --platform google_meet --meeting abc-defg-hij --profile internal
+docker compose --profile vexa up -d  # Vexa 서비스 포함 기동(이미지 교체 필요)
+
+# Vexa 내장 전사 vs 우리 Phase 2 전사 A/B 비교
+python scripts/ab_transcribe.py --vexa mtg.vexa.json --ours mtg.transcript.json --ref ref.txt
 ```
 
 ## n8n 오케스트레이션 (Phase 3)
@@ -79,4 +87,4 @@ docker compose up -d --build         # n8n(:5678) + ollama(:11434)
 - ✅ **Phase 1** — 회의록 생성기: 3단 LLM 체인(용어교정→청크요약→통합) + pydantic 검증 + Ollama/Gemini 어댑터.
 - ✅ **Phase 2** — 전사 엔진: ffmpeg→faster-whisper(Groq 폴백)→pyannote 화자분리→병합. CER 스크립트 포함.
 - ✅ **Phase 3** — 결합 파이프라인 + n8n 워크플로우 + docker-compose(n8n/ollama).
-- ⬜ Phase 4 — 미구현 (Vexa 봇 참석).
+- ✅ **Phase 4** — Vexa 봇 참석 연동 + 봇 dispatch/ingest CLI + Vexa↔Phase2 A/B 비교.

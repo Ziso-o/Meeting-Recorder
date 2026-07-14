@@ -53,11 +53,34 @@ services:
       - DIARIZER=${DIARIZER:-pyannote}
       # 실패 알림용 웹훅 (Slack/Teams 등) — 선택
       - ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL:-}
+      # Vexa 봇 연동 (Phase 4)
+      - VEXA_API_URL=${VEXA_API_URL:-http://vexa:8000}
+      - VEXA_API_KEY=${VEXA_API_KEY:-}
+      - VEXA_BOT_NAME=${VEXA_BOT_NAME:-회의록봇}
     volumes:
       - n8n_data:/home/node/.n8n
       - ./data:/data              # inbox(입력 오디오) / out(회의록) 공유
     depends_on:
       - ollama
+
+  # ---- Phase 4: Vexa 봇 (Apache-2.0, 셀프호스팅) ----
+  # ⚠️ Vexa는 본래 다중 컨테이너 스택(gateway/bot-manager/whisperlive/db 등)으로 운영한다.
+  #    운영 배포는 공식 레포의 compose를 사용하는 것을 권장한다:
+  #        https://github.com/Vexa-ai/vexa
+  #    아래 항목은 우리 스택과 동일 네트워크에서 Vexa API 게이트웨이를 노출하기 위한
+  #    스캐폴드다. `image`를 실제 사용하는 Vexa 게이트웨이 이미지로 교체할 것.
+  #    opt-in 프로파일이라 기본 `docker compose up`에서는 뜨지 않는다:
+  #        docker compose --profile vexa up -d
+  vexa:
+    image: ${VEXA_IMAGE:-vexaai/vexa-gateway:latest}   # TODO: 실제 Vexa 게이트웨이 이미지로 교체
+    container_name: mr_vexa
+    profiles: ["vexa"]
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ADMIN_API_KEY=${VEXA_ADMIN_KEY:-}
+    # Vexa 전체 스택(bot-manager, whisperlive, redis, postgres 등)은 공식 compose 참조.
 
 volumes:
   n8n_data:

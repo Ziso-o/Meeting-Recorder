@@ -42,7 +42,7 @@
 | **Phase 1** | 회의록 생성기 (텍스트 → 회의록). **가장 먼저.** | ✅ 완료 |
 | **Phase 2** | 전사 엔진 (오디오 → 화자라벨 텍스트) | ✅ 완료 |
 | **Phase 3** | 1+2 결합 + n8n 워크플로우 | ✅ 완료 |
-| **Phase 4** | Vexa 봇 참석 연동 | ⬜ 대기 |
+| **Phase 4** | Vexa 봇 참석 연동 | ✅ 완료 |
 
 > **각 Phase는 사용자가 명시적으로 지시할 때만 시작한다. 앞서가지 마라.**
 
@@ -116,7 +116,13 @@ Meeting-Recorder/
   - `docker-compose.yml`(n8n + ollama) + `docker/Dockerfile.n8n`(n8n에 python+ffmpeg+CLI 통합)
   - `workflows/meeting_minutes.json`: 폴더감시/웹훅 → transcribe → generate → **보안등급 IF 분기** → Markdown 배포 → 실패 재시도(3회)·에러알림
   - 보안분기 규칙: 경로/파일명에 `secure` 포함 → 로컬 LLM(out/secure), 그 외 → 클라우드(out/internal)
-- **다음**: Phase 4 (Vexa 봇 참석 연동) — 사용자 지시 대기 중.
+- **Phase 4 완료**: Vexa 봇 참석 연동. pytest 26개 통과. **전 Phase 완료 🎉**
+  - `vexa/client.py`(REST: dispatch/transcript/stop) + `vexa/convert.py`(Vexa전사→Segment) + `vexa/mock.py`
+  - `bot.py` CLI: `request`/`stop`/`transcript`/`ingest`(Vexa전사→회의록). 봇명 `VEXA_BOT_NAME` config
+  - `scripts/ab_transcribe.py`: Vexa 내장 전사 vs 우리 Phase 2 전사 A/B(세그먼트/화자/문자수 + CER)
+  - `docker-compose.yml`: vexa 서비스(opt-in `--profile vexa`) 추가, n8n에 VEXA_* 주입
+  - `workflows/vexa_meeting.json`: 봇 dispatch 웹훅 + 회의종료 웹훅 → ingest → 보안분기 → 배포/알림
+  - 오프라인 검증: `VEXA_CLIENT=mock`
 
 ### 개발 환경 메모
 - `uv venv && uv pip install -e ".[dev]"` 후 `python -m minutes.generate` 사용(‑e 설치 필요).
