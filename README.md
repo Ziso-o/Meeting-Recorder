@@ -49,11 +49,20 @@ python -m minutes.generate --input transcript.json --profile secure     # Ollama
 # 오프라인 스모크 테스트 (실제 LLM 호출 없이 파이프라인 확인)
 LLM_PROVIDER=mock python -m minutes.generate --input tests/fixtures/sample_transcript.json --profile secure
 
-# Phase 2: 전사 (미구현)
-python -m minutes.transcribe --audio meeting.m4a
+# Phase 2: 전사 (✅ 구현됨) — 오디오 → 화자라벨 전사 JSON(= Phase 1 입력)
+python -m minutes.transcribe --audio meeting.m4a           # GPU 있으면 faster-whisper, 없으면 Groq
+uv pip install -e ".[transcribe]"                          # 전사 실사용 시 (torch/pyannote/faster-whisper)
+
+# 전체 체인 오프라인 데모 (실제 LLM/모델 없이)
+ASR_ENGINE=mock DIARIZER=mock python -m minutes.transcribe --audio meeting.m4a
+LLM_PROVIDER=mock python -m minutes.generate --input meeting.transcript.json --profile secure
+
+# CER(전사 품질) 측정
+python scripts/cer.py --ref reference.txt --hyp meeting.transcript.json
 ```
 
 ## 진행 상태
 
-- ✅ **Phase 1** — 회의록 생성기: 3단 LLM 체인(용어교정→청크요약→통합) + pydantic 검증 + Ollama/Gemini 어댑터. pytest 통과.
-- ⬜ Phase 2~4 — 미구현.
+- ✅ **Phase 1** — 회의록 생성기: 3단 LLM 체인(용어교정→청크요약→통합) + pydantic 검증 + Ollama/Gemini 어댑터.
+- ✅ **Phase 2** — 전사 엔진: ffmpeg→faster-whisper(Groq 폴백)→pyannote 화자분리→병합. CER 스크립트 포함.
+- ⬜ Phase 3~4 — 미구현.

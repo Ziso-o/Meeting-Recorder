@@ -40,7 +40,7 @@
 | Phase | 범위 | 상태 |
 |---|---|---|
 | **Phase 1** | 회의록 생성기 (텍스트 → 회의록). **가장 먼저.** | ✅ 완료 |
-| **Phase 2** | 전사 엔진 (오디오 → 화자라벨 텍스트) | ⬜ 대기 |
+| **Phase 2** | 전사 엔진 (오디오 → 화자라벨 텍스트) | ✅ 완료 |
 | **Phase 3** | 1+2 결합 + n8n 워크플로우 | ⬜ 대기 |
 | **Phase 4** | Vexa 봇 참석 연동 | ⬜ 대기 |
 
@@ -105,8 +105,16 @@ Meeting-Recorder/
   - `prompts/01·02·03.md` (사람이 튜닝할 IP), `glossary.py`, `render.py`(Markdown)
   - 실행: `python -m minutes.generate --input transcript.json --profile internal|secure`
   - 오프라인 검증: `LLM_PROVIDER=mock` 로 네트워크 없이 파이프라인 실행 가능
-- **다음**: Phase 2 (전사 엔진) — 사용자 지시 대기 중.
+- **Phase 2 완료**: 전사 엔진 (오디오 → 화자라벨 텍스트). pytest 17개 통과.
+  - `asr/audio.py` ffmpeg 16kHz mono / `asr/whisper_engine.py`(faster-whisper, initial_prompt에 glossary 주입) / `asr/groq_engine.py`(폴백)
+  - `asr/diarize.py`(pyannote) / `asr/merge.py`(화자 배정+연속 병합 → Phase 1 스키마)
+  - `asr/__init__.py` 팩토리: `ASR_ENGINE=auto`(GPU 있으면 faster-whisper, 없으면 Groq)|mock, `DIARIZER=auto|mock|off`
+  - `scripts/cer.py` CER 측정. 실행: `python -m minutes.transcribe --audio meeting.m4a`
+  - 오프라인 검증: `ASR_ENGINE=mock DIARIZER=mock` — transcribe→generate 전체 체인 확인됨
+- **다음**: Phase 3 (결합 + n8n 워크플로우) — 사용자 지시 대기 중.
 
 ### 개발 환경 메모
 - `uv venv && uv pip install -e ".[dev]"` 후 `python -m minutes.generate` 사용(‑e 설치 필요).
-- 테스트: `.venv/bin/python -m pytest -q` (MockProvider로 네트워크 없이 e2e).
+- 전사 실사용: `uv pip install -e ".[transcribe]"` + ffmpeg + HF_TOKEN(pyannote)/GROQ_API_KEY.
+- 테스트: `.venv/bin/python -m pytest -q` (mock으로 네트워크·GPU·오디오 없이 e2e).
+- 오프라인 데모: `ASR_ENGINE=mock DIARIZER=mock ... transcribe` → `LLM_PROVIDER=mock ... generate`.

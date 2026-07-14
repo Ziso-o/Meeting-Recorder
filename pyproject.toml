@@ -16,6 +16,13 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.6",
 ]
+# Phase 2 전사 엔진 (무겁고 GPU/토큰 필요 — 필요할 때만 설치)
+#   uv pip install -e ".[transcribe]"
+transcribe = [
+    "faster-whisper>=1.0",
+    "pyannote.audio>=3.1",
+    "torch>=2.1",
+]
 
 [build-system]
 requires = ["hatchling"]
