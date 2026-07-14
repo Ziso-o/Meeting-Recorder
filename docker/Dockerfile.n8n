@@ -1,0 +1,30 @@
+# n8n + minutes CLI 통합 이미지.
+# n8n이 Execute Command 노드로 `python -m minutes.*` 를 직접 호출한다.
+# (제약: "n8n은 이 CLI를 호출할 뿐" — CLI가 단일 진실원천)
+#
+# 기본은 경량(코어 의존성 + ffmpeg): 전사는 Groq 폴백/mock 사용.
+# 로컬(air-gapped) faster-whisper/pyannote가 필요하면 build-arg로 확장:
+#   docker build --build-arg INSTALL_TRANSCRIBE=1 -f docker/Dockerfile.n8n .
+FROM n8nio/n8n:latest
+
+ARG INSTALL_TRANSCRIBE=0
+USER root
+
+# python3 + ffmpeg (Alpine 기반 n8n 이미지)
+RUN apk add --no-cache python3 py3-pip ffmpeg
+
+# 소스 복사 후 격리된 venv에 설치
+COPY . /opt/minutes
+RUN python3 -m venv /opt/minutes-venv \
+    && /opt/minutes-venv/bin/pip install --no-cache-dir --upgrade pip \
+    && if [ "$INSTALL_TRANSCRIBE" = "1" ]; then \
+         /opt/minutes-venv/bin/pip install --no-cache-dir "/opt/minutes[transcribe]"; \
+       else \
+         /opt/minutes-venv/bin/pip install --no-cache-dir "/opt/minutes"; \
+       fi
+
+# Execute Command 노드가 참조하는 파이썬 실행 파일 경로
+ENV MINUTES_PY=/opt/minutes-venv/bin/python
+ENV MINUTES_HOME=/opt/minutes
+
+USER node

@@ -59,10 +59,24 @@ LLM_PROVIDER=mock python -m minutes.generate --input meeting.transcript.json --p
 
 # CER(전사 품질) 측정
 python scripts/cer.py --ref reference.txt --hyp meeting.transcript.json
+
+# Phase 3: 결합 파이프라인 (오디오 → 회의록 한 번에)
+python -m minutes.pipeline --audio meeting.m4a --profile secure
+
+# Phase 3: n8n 오케스트레이션 (Docker)
+docker compose up -d --build         # n8n(:5678) + ollama(:11434)
+# → ./data/inbox 에 오디오 투입 → ./data/out/{secure,internal}/ 에 회의록
 ```
+
+## n8n 오케스트레이션 (Phase 3)
+
+`workflows/meeting_minutes.json` 을 n8n에 import. 흐름:
+폴더감시/웹훅 → 전사 → 회의록 생성 → **보안등급 분기(secure/internal)** → Markdown 배포 → 실패 시 재시도·알림.
+자세한 내용은 [`workflows/README.md`](./workflows/README.md).
 
 ## 진행 상태
 
 - ✅ **Phase 1** — 회의록 생성기: 3단 LLM 체인(용어교정→청크요약→통합) + pydantic 검증 + Ollama/Gemini 어댑터.
 - ✅ **Phase 2** — 전사 엔진: ffmpeg→faster-whisper(Groq 폴백)→pyannote 화자분리→병합. CER 스크립트 포함.
-- ⬜ Phase 3~4 — 미구현.
+- ✅ **Phase 3** — 결합 파이프라인 + n8n 워크플로우 + docker-compose(n8n/ollama).
+- ⬜ Phase 4 — 미구현 (Vexa 봇 참석).

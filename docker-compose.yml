@@ -1,0 +1,64 @@
+# Phase 3 — n8n(오케스트레이션) + Ollama(로컬 LLM, secure 프로파일)
+#
+# 사용:
+#   cp .env.example .env   # 값 채우기 (GEMINI_API_KEY / GROQ_API_KEY / HF_TOKEN 등)
+#   docker compose up -d --build
+#   n8n:    http://localhost:5678
+#   회의 오디오를 ./data/inbox 에 넣으면 워크플로우가 감지 → 회의록 생성
+#   결과:   ./data/out/{secure,internal}/*.minutes.md
+#
+# 보안등급 분기:
+#   - 파일명/경로에 'secure' 포함 → profile=secure → Ollama(로컬) LLM, 결과는 out/secure
+#   - 그 외                         → profile=internal → Gemini(클라우드) LLM, 결과는 out/internal
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: mr_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # GPU가 있으면 아래 주석 해제 (NVIDIA Container Toolkit 필요)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  n8n:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.n8n
+    container_name: mr_n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=${N8N_HOST:-localhost}
+      - N8N_PORT=5678
+      - GENERIC_TIMEZONE=${TZ:-Asia/Seoul}
+      # minutes CLI가 참조하는 값 (Execute Command 노드로 전달됨)
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:14b}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - HF_TOKEN=${HF_TOKEN:-}
+      # 전사 엔진: 경량 이미지 기본은 groq. 로컬 GPU면 faster-whisper 로.
+      - ASR_ENGINE=${ASR_ENGINE:-groq}
+      - DIARIZER=${DIARIZER:-pyannote}
+      # 실패 알림용 웹훅 (Slack/Teams 등) — 선택
+      - ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL:-}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./data:/data              # inbox(입력 오디오) / out(회의록) 공유
+    depends_on:
+      - ollama
+
+volumes:
+  n8n_data:
+  ollama_data:

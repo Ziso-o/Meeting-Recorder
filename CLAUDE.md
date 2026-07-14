@@ -41,7 +41,7 @@
 |---|---|---|
 | **Phase 1** | 회의록 생성기 (텍스트 → 회의록). **가장 먼저.** | ✅ 완료 |
 | **Phase 2** | 전사 엔진 (오디오 → 화자라벨 텍스트) | ✅ 완료 |
-| **Phase 3** | 1+2 결합 + n8n 워크플로우 | ⬜ 대기 |
+| **Phase 3** | 1+2 결합 + n8n 워크플로우 | ✅ 완료 |
 | **Phase 4** | Vexa 봇 참석 연동 | ⬜ 대기 |
 
 > **각 Phase는 사용자가 명시적으로 지시할 때만 시작한다. 앞서가지 마라.**
@@ -111,7 +111,12 @@ Meeting-Recorder/
   - `asr/__init__.py` 팩토리: `ASR_ENGINE=auto`(GPU 있으면 faster-whisper, 없으면 Groq)|mock, `DIARIZER=auto|mock|off`
   - `scripts/cer.py` CER 측정. 실행: `python -m minutes.transcribe --audio meeting.m4a`
   - 오프라인 검증: `ASR_ENGINE=mock DIARIZER=mock` — transcribe→generate 전체 체인 확인됨
-- **다음**: Phase 3 (결합 + n8n 워크플로우) — 사용자 지시 대기 중.
+- **Phase 3 완료**: 결합 파이프라인 + n8n 오케스트레이션. pytest 20개 통과.
+  - `pipeline.py`: 오디오→회의록 한 번에(`python -m minutes.pipeline --audio X --profile ...`)
+  - `docker-compose.yml`(n8n + ollama) + `docker/Dockerfile.n8n`(n8n에 python+ffmpeg+CLI 통합)
+  - `workflows/meeting_minutes.json`: 폴더감시/웹훅 → transcribe → generate → **보안등급 IF 분기** → Markdown 배포 → 실패 재시도(3회)·에러알림
+  - 보안분기 규칙: 경로/파일명에 `secure` 포함 → 로컬 LLM(out/secure), 그 외 → 클라우드(out/internal)
+- **다음**: Phase 4 (Vexa 봇 참석 연동) — 사용자 지시 대기 중.
 
 ### 개발 환경 메모
 - `uv venv && uv pip install -e ".[dev]"` 후 `python -m minutes.generate` 사용(‑e 설치 필요).

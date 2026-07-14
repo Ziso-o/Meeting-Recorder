@@ -1,0 +1,17 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+*.egg-info
+data
+outputs
+models
+*.wav
+*.m4a
+*.mp3
+docker/n8n_data
+docker/ollama_data
