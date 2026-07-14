@@ -1,0 +1,29 @@
+[project]
+name = "meeting-recorder"
+version = "0.1.0"
+description = "AI 회의록 자동화 시스템 — 오디오 → 전사/화자분리 → LLM 회의록"
+readme = "README.md"
+requires-python = ">=3.11"
+# 의존성은 각 Phase에서 추가한다 (부트스트랩 단계에서는 비워둠).
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/minutes"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

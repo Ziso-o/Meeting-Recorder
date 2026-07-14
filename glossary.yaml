@@ -1,0 +1,22 @@
+# glossary.yaml — 용어집 (사업명 / 기관명 / 기술약어)
+# LLM 용어 교정 단계와 전사 initial_prompt에 주입되어 고유명사 오인식을 교정한다.
+# STUB — Phase 1에서 실제 항목을 채운다. 아래는 형식 예시.
+
+# 사업명
+projects: []
+#   - "OO 지능형 관제 플랫폼 구축 사업"
+
+# 기관명
+organizations: []
+#   - "행정안전부"
+#   - "한국지능정보사회진흥원(NIA)"
+
+# 기술 약어 (오인식 → 정정)
+acronyms: []
+#   - term: "RAG"
+#     aliases: ["래그", "rag"]
+#   - term: "API"
+#     aliases: ["에이피아이"]
+
+# 인명 / 직책 (선택)
+people: []
