@@ -4,8 +4,12 @@ version = "0.1.0"
 description = "AI 회의록 자동화 시스템 — 오디오 → 전사/화자분리 → LLM 회의록"
 readme = "README.md"
 requires-python = ">=3.11"
-# 의존성은 각 Phase에서 추가한다 (부트스트랩 단계에서는 비워둠).
-dependencies = []
+# Phase 1: 회의록 생성기
+dependencies = [
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+    "httpx>=0.27",
+]
 
 [project.optional-dependencies]
 dev = [

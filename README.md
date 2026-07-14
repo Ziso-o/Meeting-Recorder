@@ -31,18 +31,29 @@ n8n이 오케스트레이션하고 Vexa 봇이 회의에 자동 참석한다.
 ## 설치 (준비)
 
 ```bash
-cp .env.example .env      # 키 값 채우기
-uv sync                   # 의존성 (각 Phase에서 추가됨)
+cp .env.example .env               # 키 값 채우기
+uv venv
+uv pip install -e ".[dev]"         # 패키지(editable) + 개발 의존성
+
+# 테스트 (네트워크 없이 MockProvider로 e2e)
+.venv/bin/python -m pytest -q
 ```
 
 ## 사용법 (목표)
 
 ```bash
-# Phase 1: 회의록 생성
-python -m minutes.generate --input transcript.json --profile internal
+# Phase 1: 회의록 생성 (✅ 구현됨)
+python -m minutes.generate --input transcript.json --profile internal   # Gemini(클라우드)
+python -m minutes.generate --input transcript.json --profile secure     # Ollama(로컬)
 
-# Phase 2: 전사
+# 오프라인 스모크 테스트 (실제 LLM 호출 없이 파이프라인 확인)
+LLM_PROVIDER=mock python -m minutes.generate --input tests/fixtures/sample_transcript.json --profile secure
+
+# Phase 2: 전사 (미구현)
 python -m minutes.transcribe --audio meeting.m4a
 ```
 
-> ⚠️ 현재 부트스트랩 단계 — 디렉토리 스켈레톤만 존재하며 실제 로직은 각 Phase에서 구현된다.
+## 진행 상태
+
+- ✅ **Phase 1** — 회의록 생성기: 3단 LLM 체인(용어교정→청크요약→통합) + pydantic 검증 + Ollama/Gemini 어댑터. pytest 통과.
+- ⬜ Phase 2~4 — 미구현.
