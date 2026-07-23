@@ -124,6 +124,13 @@ Meeting-Recorder/
   - `workflows/vexa_meeting.json`: 봇 dispatch 웹훅 + 회의종료 웹훅 → ingest → 보안분기 → 배포/알림
   - 오프라인 검증: `VEXA_CLIENT=mock`
 
+### MVP: 무료·로컬 정책 (2026-07, 코드에 반영됨)
+- **제약**: 모든 엔진 무료 / 로컬 우선(클라우드 배포는 후순위). 상세 로드맵 `TODO.md`.
+- `ASR_ENGINE=auto` → **항상 로컬 faster-whisper**(GPU 없으면 CPU). Groq는 명시 시에만(`resolve_asr_choice`).
+- `internal` 프로파일: GEMINI_API_KEY 없으면 **로컬 Ollama로 폴백**(경고). secure는 항상 Ollama.
+- `DIARIZER=auto` + HF_TOKEN 없음 → **화자분리 비활성**(단일 화자, 경고). 강제는 `DIARIZER=pyannote`.
+- `.env.example`이 무료·로컬 프리셋(auto/medium/qwen2.5:7b). pytest 32개 통과.
+
 ### 개발 환경 메모
 - `uv venv && uv pip install -e ".[dev]"` 후 `python -m minutes.generate` 사용(‑e 설치 필요).
 - 전사 실사용: `uv pip install -e ".[transcribe]"` + ffmpeg + HF_TOKEN(pyannote)/GROQ_API_KEY.

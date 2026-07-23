@@ -79,7 +79,7 @@ def test_term_correction_preserves_segment_count():
 
 
 def test_provider_selection_by_profile(monkeypatch):
-    """secure→ollama, internal→gemini 로 프로바이더가 선택돼야 한다."""
+    """secure→ollama, internal→gemini(키 있을 때) 로 프로바이더가 선택돼야 한다."""
     from minutes.config import provider_for_profile
 
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
@@ -88,3 +88,22 @@ def test_provider_selection_by_profile(monkeypatch):
     assert provider_for_profile("internal").name == "gemini"
     with pytest.raises(ValueError):
         provider_for_profile("unknown")
+
+
+def test_internal_falls_back_to_ollama_without_key(monkeypatch):
+    """무료·로컬 정책: internal이라도 GEMINI_API_KEY가 없으면 로컬 Ollama로 폴백."""
+    from minutes.config import provider_for_profile
+
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    assert provider_for_profile("internal").name == "ollama"
+    assert provider_for_profile("secure").name == "ollama"
+
+
+def test_explicit_llm_provider_overrides(monkeypatch):
+    """LLM_PROVIDER를 명시하면 프로파일 기본을 덮어쓴다."""
+    from minutes.config import provider_for_profile
+
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    assert provider_for_profile("internal").name == "mock"
+    assert provider_for_profile("secure").name == "mock"

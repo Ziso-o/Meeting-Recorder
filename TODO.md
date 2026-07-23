@@ -23,15 +23,14 @@
 
 ---
 
-## 1. 코드 보완 — 무료·로컬 정책 반영 (P0)
+## 1. 코드 보완 — 무료·로컬 정책 반영 (P0) ✅ 완료
 
-- [ ] **ASR `auto`가 GPU 없을 때 Groq(클라우드)로 폴백하는 로직 변경** — `src/minutes/asr/__init__.py:47`
-      → GPU 없으면 **faster-whisper(CPU)** 로 가도록(무료·로컬 유지). Groq는 명시적 `ASR_ENGINE=groq`일 때만.
-- [ ] **internal 프로파일도 로컬로 기본 동작하도록 정리** — `config.py`
-      → 로컬 검증 단계에서는 `LLM_PROVIDER=ollama`로 override(문서화) 또는 `--profile internal` 기본을 로컬로.
-- [ ] **CPU용 Whisper 모델 크기 가이드** — large-v3는 CPU에서 매우 느림.
-      `WHISPER_MODEL=medium`(또는 `small`) 권장값 문서화(코드는 이미 `WHISPER_MODEL` 지원).
-- [ ] Groq/Gemini 문서에 **"무료티어/크레딧 주의, 기본 비활성"** 경고 명시.
+- [x] **ASR `auto` → 항상 로컬 faster-whisper** (GPU 없으면 CPU). Groq는 명시 시에만.
+      `resolve_asr_choice()` 분리 + 테스트. (`asr/__init__.py`)
+- [x] **internal 프로파일 무료·로컬 폴백** — GEMINI_API_KEY 없으면 Ollama로 폴백(경고). (`config.py`)
+- [x] **화자분리 graceful degrade** — HF_TOKEN 없으면 크래시 대신 단일 화자(경고). (`asr/__init__.py`)
+- [x] **`.env` 무료·로컬 프리셋** — ASR_ENGINE=auto, WHISPER_MODEL=medium, OLLAMA_MODEL=qwen2.5:7b.
+- [x] docker-compose 기본을 auto/auto 로.
 
 ## 2. 로컬 환경 셋업 (P0)
 
@@ -95,6 +94,6 @@
 
 ## 즉시 착수 후보 (다음 액션)
 
-1. **§1 코드 보완** — ASR auto의 로컬 폴백 + internal 로컬화 (무료·로컬 정책을 코드에 고정)
-2. **§2 .env 무료·로컬 프리셋** 확정
-3. **§4(b) 실오디오 1건** 완전 로컬 e2e
+1. ~~**§1 코드 보완** — 무료·로컬 정책 코드 고정~~ ✅ 완료 (MVP)
+2. **§2 로컬 환경 셋업** — Ollama 설치 + `ollama pull qwen2.5:7b` + `[transcribe]` 설치
+3. **§4(b) 실오디오 1건** 완전 로컬 e2e (faster-whisper CPU + Ollama, 클라우드 0)

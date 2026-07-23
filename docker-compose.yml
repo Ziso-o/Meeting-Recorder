@@ -48,9 +48,10 @@ services:
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
       - GROQ_API_KEY=${GROQ_API_KEY:-}
       - HF_TOKEN=${HF_TOKEN:-}
-      # 전사 엔진: 경량 이미지 기본은 groq. 로컬 GPU면 faster-whisper 로.
-      - ASR_ENGINE=${ASR_ENGINE:-groq}
-      - DIARIZER=${DIARIZER:-pyannote}
+      # 전사 엔진: 무료·로컬 기본(auto=faster-whisper). 컨테이너 CPU 전사는 느리므로
+      # 대용량 회의는 로컬 CLI 권장. 클라우드로 빼려면 ASR_ENGINE=groq + GROQ_API_KEY.
+      - ASR_ENGINE=${ASR_ENGINE:-auto}
+      - DIARIZER=${DIARIZER:-auto}
       # 실패 알림용 웹훅 (Slack/Teams 등) — 선택
       - ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL:-}
       # Vexa 봇 연동 (Phase 4)
