@@ -34,7 +34,9 @@
 
 ## 2. 로컬 환경 셋업 (P0)
 
-- [ ] `uv venv && uv pip install -e ".[dev]"` → `pytest -q` (26 passed 확인)
+- [x] **원커맨드 실행 스크립트** — `scripts/run_local.sh`(+`.ps1`). uv 없으면 venv 폴백,
+      Windows `Scripts/` 경로 자동 판별, ffmpeg/Ollama 사전점검. `--mock`/`--setup-only`/`--audio`.
+- [ ] `uv venv && uv pip install -e ".[dev]"` → `pytest -q` (32 passed 확인)
 - [ ] 전사 의존성: `uv pip install -e ".[transcribe]"` (torch/faster-whisper/pyannote)
 - [ ] **ffmpeg** 설치 (`apt install ffmpeg` / `brew install ffmpeg`)
 - [ ] **Ollama 로컬 설치** (https://ollama.com, 무료) + 모델 pull

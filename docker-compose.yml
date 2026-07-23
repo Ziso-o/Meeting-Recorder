@@ -43,7 +43,7 @@ services:
       - GENERIC_TIMEZONE=${TZ:-Asia/Seoul}
       # minutes CLI가 참조하는 값 (Execute Command 노드로 전달됨)
       - OLLAMA_HOST=http://ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:14b}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
       - GROQ_API_KEY=${GROQ_API_KEY:-}

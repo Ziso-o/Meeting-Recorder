@@ -31,27 +31,53 @@
 
 ---
 
-# 1. 빠른 시작 (키·GPU 없이 배관 확인)
+# 0. 원커맨드 로컬 실행 (권장 — `uv` 없어도 됨)
 
-의존성만 설치하면 **네트워크·GPU·오디오 없이** mock으로 전체 파이프라인을 확인할 수 있다.
+`scripts/run_local.sh`(Linux/macOS/**Windows Git-Bash**) 또는 `scripts/run_local.ps1`(PowerShell)이
+가상환경 생성 → 의존성 설치(`uv` 없으면 `python -m venv`로 폴백) → `.env` 준비 → 실행까지 처리한다.
 
 ```bash
-git clone https://github.com/Ziso-o/Meeting-Recorder.git
-cd Meeting-Recorder
+# 오프라인 데모 (엔진/키/GPU 불필요 — 배관만 확인, 가볍게)
+bash scripts/run_local.sh --minimal --mock
 
-uv venv
-uv pip install -e ".[dev]"          # 코어 + 개발 의존성
-.venv/bin/python -m pytest -q        # 26 passed 여야 정상
+# 완전 로컬 파이프라인 (Ollama + faster-whisper, 클라우드 0)
+bash scripts/run_local.sh --audio 회의.m4a --profile secure
+
+# 설치/셋업만 (사전점검: ffmpeg·Ollama 모델 확인)
+bash scripts/run_local.sh --setup-only
+```
+```powershell
+# Windows PowerShell
+powershell -ExecutionPolicy Bypass -File scripts\run_local.ps1 -Audio 회의.m4a -Profile secure
+```
+> Windows Git-Bash에서 `uv: command not found` / `No module named 'minutes'` 가 났다면,
+> **패키지가 venv에 설치되지 않은 것**이다. 위 스크립트가 이를 해결한다(직접 하려면 아래 수동 절차).
+
+---
+
+# 1. 빠른 시작 (수동, 키·GPU 없이 배관 확인)
+
+스크립트 없이 직접 하려면 — **네트워크·GPU·오디오 없이** mock으로 전체 파이프라인을 확인:
+
+```bash
+# uv가 있으면:
+uv venv && uv pip install -e ".[dev]"
+# uv가 없으면 (Windows Git-Bash 포함):
+python -m venv .venv
+.venv/Scripts/python -m pip install -e ".[dev]"    # Windows (.venv/Scripts)
+# .venv/bin/python -m pip install -e ".[dev]"       # Linux/macOS (.venv/bin)
+
+.venv/Scripts/python -m pytest -q                   # 32 passed 여야 정상 (Windows)
 
 # 오프라인 전체 체인 (transcribe → generate) — 실제 모델/키 불필요
 touch demo.m4a
 ASR_ENGINE=mock DIARIZER=mock LLM_PROVIDER=mock \
-  .venv/bin/python -m minutes.pipeline --audio demo.m4a --profile secure
-cat demo.minutes.md
+  .venv/Scripts/python -m minutes.pipeline --audio demo.m4a --profile secure
 ```
 
-> 이후 예시는 `uv venv`로 만든 가상환경(`.venv/bin/python`)을 `python`으로 줄여 표기한다.
-> (`source .venv/bin/activate` 후 `python ...` 로 실행)
+> ⚠️ 핵심: `python -m minutes.*` 는 **패키지를 venv에 `-e` 설치한 뒤**, 그 **venv의 python**으로 실행해야 한다.
+> 시스템 python으로 실행하면 `No module named 'minutes'` 가 난다.
+> 이후 예시의 `python`은 venv python(`.venv/Scripts/python` 또는 `.venv/bin/python`)을 뜻한다.
 
 ---
 

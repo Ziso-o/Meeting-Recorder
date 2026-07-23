@@ -60,7 +60,7 @@ def provider_for_profile(profile: str) -> LLMProvider:
     if provider == "ollama":
         return OllamaProvider(
             host=os.environ.get("OLLAMA_HOST", "http://localhost:11434"),
-            model=os.environ.get("OLLAMA_MODEL", "qwen2.5:14b"),
+            model=os.environ.get("OLLAMA_MODEL", "qwen2.5:7b"),
         )
     if provider == "gemini":
         return GeminiProvider(
