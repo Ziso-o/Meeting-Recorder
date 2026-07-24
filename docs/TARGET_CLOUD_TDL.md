@@ -55,6 +55,13 @@ Phase A  [집 PC · 지포스 50번대 · 24/7 자체 서버]
 Phase B  [Vultr 등 클라우드 GPU 임대]  ← 동일 스택 이관(docker compose + 시크릿)
 ```
 
+### 3.0 머신 분담 (회사 노트북 / 집 GPU PC 병행)
+- **회사 저사양 노트북 = 개발/플러밍**: 무거운 LLM·Vexa 실행 안 함.
+  `LLM_PROVIDER=mock`, `VEXA_CLIENT=mock`, `ASR_ENGINE=mock` 로 워크플로/코드만 검증.
+- **집 GPU PC(지포스 50번대) = 실구동**: 실제 Vexa 셀프호스팅 + Ollama(GPU) + large-v3.
+- **GPU 설정은 현재 보류** — `.env.example`의 `[GPU 프리셋]`에 **주석으로만** 존재. 집 PC 실구동 시 해제.
+- Vexa 실구동 셋업 절차: **[`VEXA_SELFHOST_WINDOWS.md`](VEXA_SELFHOST_WINDOWS.md)**.
+
 ### 3.1 ⚠️ Vexa 셀프호스팅 on Windows — 진짜 관문
 - Vexa 스택은 **Linux 컨테이너** 기반 → Windows에선 **Docker Desktop + WSL2**(경량 VM) 필요.
   (이전 "Docker/VM 금지"는 로컬 처리박스 한정. Vexa 서버엔 예외 적용 — D3.)
@@ -97,7 +104,7 @@ Phase B  [Vultr 등 클라우드 GPU 임대]  ← 동일 스택 이관(docker co
 | 언제 | 로컬 검증 → 클라우드. 회의 시작 시 dispatch |
 | 어디서 | **집 PC**의 Vexa 셀프호스팅(Docker Desktop+WSL2, GPU) |
 | 무엇을 | Vexa 공식 스택 기동 → API 키 발급 → `bot request`로 회의 참가 |
-| 어떻게 | Vexa 공식 레포 compose로 집 PC에 기동(WSL2 GPU) → 실회의 1건 봇참가 검증 → `minutes.bot request` 연동 |
+| 어떻게 | Vexa 공식 레포 compose로 집 PC에 기동(WSL2 GPU) → 실회의 1건 봇참가 검증 → `minutes.bot request` 연동. **절차: `VEXA_SELFHOST_WINDOWS.md`** |
 
 - [ ] **집 PC에 Docker Desktop+WSL2 + NVIDIA CUDA(WSL2) 세팅** (50번대 드라이버)
 - [ ] Vexa 공식 스택(github.com/Vexa-ai/vexa) 집 PC 기동 + API 키
