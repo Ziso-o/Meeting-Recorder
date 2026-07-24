@@ -100,11 +100,13 @@
 - [ ] 실환경 상시 실행: `python -m minutes.watch --profile secure`
       (백그라운드/작업스케줄러 등록은 운영자 재량)
 
-### 5-2. n8n 오케스트레이션 (P2 — **네이티브**, Docker 금지 정책)
-- [ ] **Docker 미사용** → Node.js LTS + `npm i -g n8n` → `n8n start`(:5678)
-- [ ] ⚠️ `workflows/*.json`은 도커 경로(`$MINUTES_PY`,`/data/...`) 전제 →
-      **Windows 네이티브 경로로 수정한 `*_local.json` 필요**(파생작업 §7-b)
-- [ ] `docker-compose.yml`/`Dockerfile.n8n`은 정책상 미사용(참고용 보존)
+### 5-2. n8n 오케스트레이션 (네이티브 + HTTP) ✅ mock e2e 검증 완료
+- [x] n8n Community 네이티브 실행(`npm i -g n8n` → `n8n start`, :5678)
+- [x] **executeCommand 미지원(2.8.4) → HTTP 방식으로 전환** (`minutes.server` + `vexa_meeting_http.json`)
+- [x] **전체 e2e 성공(mock)**: `/webhook/meeting-end` → n8n → `:8900/ingest`
+      → Vexa(mock)→회의록 → `data/out/secure/*.minutes.md` 생성 확인
+- [ ] 실물 전환: 서비스 env를 실제(VEXA/HF/GPU)로, 워크플로는 그대로(서버주소만 집 PC)
+- 참고: `vexa_meeting.json`/`_local.json`(executeCommand)·docker-compose는 보존만.
 
 ## 6. Vexa 봇 (P2 — 보류 결정 필요)
 
