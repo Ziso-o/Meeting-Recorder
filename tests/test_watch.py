@@ -20,6 +20,13 @@ def test_env_plain_and_quoted():
     assert _parse_env_value("hf_abc#nospace") == "hf_abc#nospace"  # 공백 없는 #는 보존
 
 
+def test_env_blank_value_with_comment():
+    # 빈 값 뒤 인라인 주석 → 빈 문자열 (토큰 미입력 상태)
+    assert _parse_env_value("   # 여기에 키를 넣으세요") == ""
+    assert _parse_env_value("") == ""
+    assert _parse_env_value("#comment") == ""
+
+
 # ---- watch 처리 로직 ----
 def test_run_once_requires_stable_size(tmp_path, monkeypatch):
     monkeypatch.setenv("ASR_ENGINE", "mock")

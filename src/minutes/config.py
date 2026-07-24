@@ -28,12 +28,17 @@ def _parse_env_value(val: str) -> str:
     - 감싸지 않은 값: 공백(스페이스/탭) 뒤의 `#` 부터를 주석으로 보고 제거.
       (값 중간의 `#`은 앞에 공백이 없으므로 보존 — 예: URL 프래그먼트)
     """
-    val = val.strip()
-    if val[:1] in ("'", '"'):
-        quote = val[0]
-        end = val.find(quote, 1)
-        return val[1:end] if end != -1 else val[1:]
-    return re.split(r"\s#", val, maxsplit=1)[0].strip()
+    s = val.strip()
+    if s[:1] in ("'", '"'):
+        quote = s[0]
+        end = s.find(quote, 1)
+        return s[1:end] if end != -1 else s[1:]
+    # 인라인 주석: 줄 시작(빈 값) 또는 공백 뒤의 '#' 부터 제거.
+    # (값 중간의 '#'은 앞에 공백이 없으므로 보존 — 예: 토큰/URL 프래그먼트)
+    m = re.search(r"(^|\s)#", val)
+    if m:
+        val = val[: m.start()]
+    return val.strip()
 
 
 def load_dotenv(path: str | Path = ".env") -> None:
