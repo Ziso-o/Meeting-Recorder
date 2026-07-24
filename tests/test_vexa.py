@@ -76,6 +76,45 @@ def test_bot_request_and_stop(monkeypatch, capsys):
     assert bot.main(["stop", "--meeting", "m1"]) == 0
 
 
+def test_bot_ingest_creates_nested_out_dir(tmp_path, monkeypatch):
+    """--out이 없는 하위 폴더(data/out/secure/...)를 가리켜도 CLI가 폴더를 만들어야 한다."""
+    monkeypatch.setenv("VEXA_CLIENT", "mock")
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    stem = tmp_path / "data" / "out" / "secure" / "vexa_m1"  # 존재하지 않는 중첩 경로
+    rc = bot.main(
+        [
+            "ingest", "--platform", "google_meet", "--meeting", "m1",
+            "--profile", "secure", "--glossary", str(ROOT / "glossary.yaml"),
+            "--out", str(stem),
+        ]
+    )
+    assert rc == 0
+    assert stem.with_suffix(".minutes.md").exists()
+
+
+def test_vexa_local_workflow_portable():
+    """네이티브 워크플로: 유효 + 배선 + 셸 cp/mkdir -p 미사용(포터블) 확인."""
+    wf = json.loads((ROOT / "workflows" / "vexa_meeting_local.json").read_text(encoding="utf-8"))
+    names = {n["name"] for n in wf["nodes"]}
+    for expected in ("웹훅: 봇 참석 요청", "봇 dispatch", "Config Vexa", "인제스트 (Vexa전사→회의록)"):
+        assert expected in names
+    # 연결 대상 유효
+    for src, conn in wf["connections"].items():
+        assert src in names
+        for outs in conn["main"]:
+            for link in outs:
+                assert link["node"] in names
+    # 포터블: executeCommand 명령에 POSIX 전용 셸 구문이 없어야 함
+    cmds = " ".join(
+        n["parameters"].get("command", "")
+        for n in wf["nodes"]
+        if n["type"] == "n8n-nodes-base.executeCommand"
+    )
+    assert "mkdir -p" not in cmds
+    assert "cp " not in cmds
+    assert "cd " not in cmds
+
+
 def test_vexa_workflow_json_valid_and_wired():
     wf = json.loads(WORKFLOW.read_text(encoding="utf-8"))
     names = {n["name"] for n in wf["nodes"]}

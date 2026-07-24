@@ -66,6 +66,8 @@ def cmd_ingest(args) -> int:
     meta = {"meeting_title": args.title, "date": args.date, "source": f"vexa:{args.meeting}"}
 
     stem = Path(args.out) if args.out else Path(args.meeting)
+    if str(stem.parent) not in ("", "."):
+        stem.parent.mkdir(parents=True, exist_ok=True)
     transcript_doc = {
         "meta": {k: v for k, v in meta.items() if v},
         "segments": [s.model_dump() for s in segments],

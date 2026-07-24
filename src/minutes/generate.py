@@ -68,6 +68,8 @@ def main(argv: list[str] | None = None) -> int:
     stem = Path(args.out) if args.out else in_path.with_suffix("")
     json_path = stem.with_suffix(".minutes.json")
     md_path = stem.with_suffix(".minutes.md")
+    if str(json_path.parent) not in ("", "."):
+        json_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.write_text(
         json.dumps(minutes.model_dump(), ensure_ascii=False, indent=2), encoding="utf-8"
     )

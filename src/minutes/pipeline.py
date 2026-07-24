@@ -57,6 +57,8 @@ def main(argv: list[str] | None = None) -> int:
         "segments": [s.model_dump() for s in segments],
     }
     transcript_path = stem.with_suffix(".transcript.json")
+    if str(transcript_path.parent) not in ("", "."):
+        transcript_path.parent.mkdir(parents=True, exist_ok=True)
     transcript_path.write_text(
         json.dumps(transcript_doc, ensure_ascii=False, indent=2), encoding="utf-8"
     )
