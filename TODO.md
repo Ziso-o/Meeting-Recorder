@@ -19,12 +19,11 @@
 - [x] **`.gitignore`** `*.bak`, `vexa/` 추가.
 - [x] **watch 스크립트 구현** — `python -m minutes.watch`(폴더감시→자동 회의록,
       크기 안정화 게이트, `--once` 크론모드). + 테스트.
-- [ ] **⚠️ `diarize.py` Windows 수정 4종 반영** — Cowork 로컬에만 존재, 브랜치엔 없음.
+- [x] **`diarize.py` Windows 수정 4종 반영 완료** — 사용자 검증본으로 교체.
       (token=/use_auth_token 폴백, soundfile 인메모리(torchcodec 우회), DiarizeOutput
-      `.speaker_diarization`, torchcodec 경고필터) → **사용자 원본 파일 받아 정확히 반영 예정**.
-- [ ] **계보 정합 결정** — 로컬 `main`(2a47d4c) vs 브랜치. 택1:
-      (a) 로컬 변경분(주로 diarize.py)만 이 브랜치에 얹어 단일화(권장) /
-      (b) 로컬 `main`을 별도 push 후 병합.
+      `.speaker_diarization`, torchcodec 경고필터). lazy import 유지 → mock 테스트 정상.
+- [x] **계보 정합 결정: 브랜치를 정본으로 단일화**(로컬 `main` 2a47d4c 폐기).
+      → 남은 것: 사용자 로컬 저장소를 이 브랜치로 정렬(아래 참고).
 
 ---
 
@@ -34,7 +33,7 @@
 |---|---|---|---|---|
 | LLM | **Ollama**(로컬) | ✅ 코드 완료 | Gemini | 클라우드. 무료티어 있으나 정책상 로컬 우선 |
 | 전사(ASR) | **faster-whisper**(로컬, GPU 없으면 **CPU**) | ✅ 코드 완료(auto=로컬) | Groq | 클라우드 + 무료티어 크레딧/유료화 리스크 |
-| 화자분리 | **pyannote**(로컬) | ⚠️ Windows 수정 반영 대기 | — | HF 토큰 무료(게이트 동의만) |
+| 화자분리 | **pyannote**(로컬) | ✅ Windows 수정 반영 완료 | — | HF 토큰 무료(게이트 동의만) |
 | 오케스트레이션 | **watch**(로컬) / n8n **네이티브** | watch ✅ / n8n 네이티브 대기 | n8n Docker | Docker 금지 정책 |
 | 봇 참석 | **Vexa** 셀프호스팅(로컬) | ✅ 코드 완료 | Vexa Cloud | 무료 self-host만 사용 |
 

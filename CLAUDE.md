@@ -134,9 +134,9 @@ Meeting-Recorder/
 ### 세션 핸드오프 반영 (Cowork→브랜치, 2026-07)
 - `SESSION_HANDOFF.md` 기준 정합화. Cowork 로컬 `main`(2a47d4c)과 이 브랜치는 별개 계보.
 - 반영됨: `.env` 인라인 주석 파서(`_parse_env_value`), `pyproject` soundfile, `.gitignore`(*.bak/vexa),
-  **`minutes.watch`**(폴더감시 자동 회의록, `--once` 크론모드). pytest 36개.
-- **미반영(대기)**: `diarize.py` Windows 수정 4종(token=/soundfile 인메모리/DiarizeOutput/torchcodec 우회)
-  — Cowork 로컬에만 존재. 사용자 원본 받아 반영 예정. 상세 `TODO.md` ★ 섹션.
+  **`minutes.watch`**(폴더감시 자동 회의록, `--once` 크론모드), **`diarize.py` Windows 수정 4종**
+  (token=/use_auth_token 폴백, soundfile 인메모리 torchcodec 우회, DiarizeOutput, 경고필터). pytest 36개.
+- **계보: 이 브랜치가 정본**(로컬 `main` 2a47d4c 폐기 방침). Cowork 로컬 변경분 반영 완료.
 - 무인 자동화는 **watch(1차, Docker 불필요)** → n8n은 **네이티브**(Docker 금지 정책).
 
 ### 개발 환경 메모
