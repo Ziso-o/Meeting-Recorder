@@ -31,6 +31,10 @@ outputs/
 *.minutes.json
 *.minutes.md
 
+# 백업 / Vexa 로컬 클론
+*.bak
+vexa/
+
 # IDE / OS
 .vscode/
 .idea/

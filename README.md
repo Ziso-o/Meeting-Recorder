@@ -172,6 +172,20 @@ python scripts/ab_transcribe.py --vexa mtg.vexa.json --ours mtg.transcript.json 
 
 ---
 
+# 3.5. 무인 자동화 — 폴더 감시 `minutes.watch` (Docker 불필요)
+
+n8n 없이도 폴더만 감시해 자동으로 회의록을 만든다. **Windows 네이티브/무료·로컬**에 적합.
+
+```bash
+python -m minutes.watch --profile secure          # data/incoming 감시 → 자동 처리
+# data/incoming 에 오디오 투입 → data/out 에 회의록, 처리분은 data/done 으로 이동(실패 data/failed)
+python -m minutes.watch --once --profile secure    # 한 번만 스캔(작업 스케줄러/크론용)
+```
+- 업로드 중 미완성 파일을 건드리지 않도록 **파일 크기 안정화 후** 처리.
+- 옵션: `--incoming/--out/--done/--failed/--interval/--profile/--glossary`.
+
+---
+
 # 4. n8n 로컬 실행 (Docker 오케스트레이션)
 
 CLI를 손으로 돌리는 대신, n8n이 **폴더 감시/웹훅 → 전사 → 생성 → 보안분기 → 배포**를 자동화한다.

@@ -131,8 +131,17 @@ Meeting-Recorder/
 - `DIARIZER=auto` + HF_TOKEN 없음 → **화자분리 비활성**(단일 화자, 경고). 강제는 `DIARIZER=pyannote`.
 - `.env.example`이 무료·로컬 프리셋(auto/medium/qwen2.5:7b). pytest 32개 통과.
 
+### 세션 핸드오프 반영 (Cowork→브랜치, 2026-07)
+- `SESSION_HANDOFF.md` 기준 정합화. Cowork 로컬 `main`(2a47d4c)과 이 브랜치는 별개 계보.
+- 반영됨: `.env` 인라인 주석 파서(`_parse_env_value`), `pyproject` soundfile, `.gitignore`(*.bak/vexa),
+  **`minutes.watch`**(폴더감시 자동 회의록, `--once` 크론모드). pytest 36개.
+- **미반영(대기)**: `diarize.py` Windows 수정 4종(token=/soundfile 인메모리/DiarizeOutput/torchcodec 우회)
+  — Cowork 로컬에만 존재. 사용자 원본 받아 반영 예정. 상세 `TODO.md` ★ 섹션.
+- 무인 자동화는 **watch(1차, Docker 불필요)** → n8n은 **네이티브**(Docker 금지 정책).
+
 ### 개발 환경 메모
 - `uv venv && uv pip install -e ".[dev]"` 후 `python -m minutes.generate` 사용(‑e 설치 필요).
+- 무인 자동화: `python -m minutes.watch --profile secure` (data/incoming→data/out, done/failed 이동).
 - 전사 실사용: `uv pip install -e ".[transcribe]"` + ffmpeg + HF_TOKEN(pyannote)/GROQ_API_KEY.
 - 테스트: `.venv/bin/python -m pytest -q` (mock으로 네트워크·GPU·오디오 없이 e2e).
 - 오프라인 데모: `ASR_ENGINE=mock DIARIZER=mock ... transcribe` → `LLM_PROVIDER=mock ... generate`.

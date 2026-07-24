@@ -22,6 +22,7 @@ transcribe = [
     "faster-whisper>=1.0",
     "pyannote.audio>=3.1",
     "torch>=2.1",
+    "soundfile>=0.12",   # diarize.py 인메모리 오디오 로딩(Windows torchcodec 우회)
 ]
 
 [build-system]

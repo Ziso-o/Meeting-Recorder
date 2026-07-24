@@ -10,12 +10,30 @@ API 키/호스트/모델은 .env(또는 환경변수)에서만 읽는다. 코드
 from __future__ import annotations
 
 import os
+import re
 import sys
 from pathlib import Path
 
 from .providers import GeminiProvider, LLMProvider, MockProvider, OllamaProvider
 
 PROFILES = ("internal", "secure")
+
+
+def _parse_env_value(val: str) -> str:
+    """.env 값에서 따옴표를 벗기고 인라인 주석을 제거한다.
+
+    함정 방지(SESSION_HANDOFF): `OLLAMA_MODEL=qwen2.5:7b   # 주석` 처럼 값 뒤에
+    인라인 주석이 붙어도 모델명이 오염되지 않도록 한다.
+    - 따옴표로 감싼 값: 따옴표 안을 그대로 사용(내부 # 보존).
+    - 감싸지 않은 값: 공백(스페이스/탭) 뒤의 `#` 부터를 주석으로 보고 제거.
+      (값 중간의 `#`은 앞에 공백이 없으므로 보존 — 예: URL 프래그먼트)
+    """
+    val = val.strip()
+    if val[:1] in ("'", '"'):
+        quote = val[0]
+        end = val.find(quote, 1)
+        return val[1:end] if end != -1 else val[1:]
+    return re.split(r"\s#", val, maxsplit=1)[0].strip()
 
 
 def load_dotenv(path: str | Path = ".env") -> None:
@@ -28,8 +46,7 @@ def load_dotenv(path: str | Path = ".env") -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, _, val = line.partition("=")
-        key, val = key.strip(), val.strip().strip('"').strip("'")
-        os.environ.setdefault(key, val)
+        os.environ.setdefault(key.strip(), _parse_env_value(val))
 
 
 def provider_for_profile(profile: str) -> LLMProvider:
