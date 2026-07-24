@@ -43,3 +43,6 @@ vexa/
 # n8n / Docker 로컬 데이터
 docker/n8n_data/
 docker/ollama_data/
+
+# 24/7 watch 로그
+logs/
