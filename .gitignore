@@ -11,10 +11,12 @@ venv/
 # uv
 uv.lock
 
-# Secrets — 절대 커밋 금지
-.env
+# Secrets
+# 사용자 결정: private 레포라 .env 커밋 허용(두 PC 동기화 목적).
+# ⚠️ public 전환/협업자 추가 시 키 노출 주의. 그 외 *.env(prod.env 등)는 계속 무시.
 *.env
 !.env.example
+!.env
 
 # Models / 대용량 데이터
 models/
