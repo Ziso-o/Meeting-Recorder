@@ -186,7 +186,29 @@ python -m minutes.watch --once --profile secure    # 한 번만 스캔(작업 �
 
 ---
 
-# 4. n8n 로컬 실행 (Docker 오케스트레이션)
+# 3.6. n8n 연동 (HTTP 서비스 — 권장, n8n 버전 무관)
+
+n8n의 Execute Command 노드는 버전에 따라 미지원이라, **HTTP 서비스**를 띄우고
+n8n은 HTTP Request로 호출한다. (Docker·네이티브·클라우드 모두 동일)
+
+```bash
+# 1) HTTP 서비스 기동 (mock 개발: 회사 노트북)
+VEXA_CLIENT=mock LLM_PROVIDER=mock python -m minutes.server     # 127.0.0.1:8900
+#   GET /health, POST /bot/dispatch|/bot/stop|/ingest|/pipeline
+
+# 2) n8n에 workflows/vexa_meeting_http.json import → Active
+#    (n8n이 다른 호스트면 MINUTES_SERVER_URL 로 서버 주소 지정)
+
+# 3) 웹훅 테스트
+curl -X POST http://localhost:5678/webhook/meeting-end \
+  -H "Content-Type: application/json" -d '{"meetingId":"testid","profile":"secure"}'
+# → 서비스가 Vexa(mock) 전사 → 회의록을 data/out/secure/ 에 생성
+```
+> 서비스만 단독 확인: `curl -X POST http://127.0.0.1:8900/ingest -H "Content-Type: application/json" -d '{"meetingId":"testid","profile":"secure"}'`
+
+---
+
+# 4. n8n 로컬 실행 (Docker 오케스트레이션 — 참고)
 
 CLI를 손으로 돌리는 대신, n8n이 **폴더 감시/웹훅 → 전사 → 생성 → 보안분기 → 배포**를 자동화한다.
 

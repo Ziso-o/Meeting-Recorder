@@ -139,6 +139,14 @@ Meeting-Recorder/
 - **계보: 이 브랜치가 정본**(로컬 `main` 2a47d4c 폐기 방침). Cowork 로컬 변경분 반영 완료.
 - 무인 자동화는 **watch(1차, Docker 불필요)** → n8n은 **네이티브**(Docker 금지 정책).
 
+### n8n 연동은 HTTP 방식 (2026-07, executeCommand 회피)
+- **문제**: n8n 2.8.4에서 `n8n-nodes-base.executeCommand`가 미지원(Unrecognized node type).
+- **해결**: `minutes.server`(표준 라이브러리 HTTP 서비스)를 띄우고 n8n은 **HTTP Request 노드**로 호출.
+  - 엔드포인트: `GET /health`, `POST /bot/dispatch|/bot/stop|/ingest|/pipeline` (기본 127.0.0.1:8900).
+  - 워크플로: **`workflows/vexa_meeting_http.json`**(httpRequest만, executeCommand 0 → n8n 버전 무관).
+  - `MINUTES_SERVER_URL`(n8n측), `MINUTES_SERVER_HOST/PORT`(서버측)로 주소 지정.
+- executeCommand 기반(`vexa_meeting.json`/`_local.json`)은 참고용 보존. **정본은 HTTP 방식.**
+
 ### 개발 환경 메모
 - `uv venv && uv pip install -e ".[dev]"` 후 `python -m minutes.generate` 사용(‑e 설치 필요).
 - 무인 자동화: `python -m minutes.watch --profile secure` (data/incoming→data/out, done/failed 이동).
