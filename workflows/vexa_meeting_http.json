@@ -1,0 +1,128 @@
+{
+  "name": "Vexa 회의 봇 (HTTP 서비스 호출)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bot-dispatch",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "f1111111-1111-4111-8111-111111111111",
+      "name": "웹훅: 봇 참석 요청",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 260],
+      "webhookId": "f1111111-1111-4111-8111-111111111111"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.MINUTES_SERVER_URL || 'http://127.0.0.1:8900') + '/bot/dispatch' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ platform: ($json.body.platform || 'google_meet'), meeting: $json.body.meetingId }) }}",
+        "options": {}
+      },
+      "id": "f2222222-2222-4222-8222-222222222222",
+      "name": "봇 dispatch (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [470, 260],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "meeting-end",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "f3333333-3333-4333-8333-333333333333",
+      "name": "웹훅: 회의 종료",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 480],
+      "webhookId": "f3333333-3333-4333-8333-333333333333"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.MINUTES_SERVER_URL || 'http://127.0.0.1:8900') + '/ingest' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ platform: ($json.body.platform || 'google_meet'), meeting: $json.body.meetingId, profile: ($json.body.profile || 'secure') }) }}",
+        "options": { "response": { "response": { "neverError": false } } }
+      },
+      "id": "f4444444-4444-4444-8444-444444444444",
+      "name": "인제스트 (HTTP: Vexa전사→회의록)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [470, 480],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ALERT_WEBHOOK_URL || 'http://localhost:9999/noop' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: '✅ Vexa 회의록 완료: ' + ($json.minutes_md || $json.stem || '') }) }}",
+        "options": {}
+      },
+      "id": "f5555555-5555-4555-8555-555555555555",
+      "name": "알림: 완료",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 480],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "id": "f6666666-6666-4666-8666-666666666666",
+      "name": "에러 트리거",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [220, 720]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ALERT_WEBHOOK_URL || 'http://localhost:9999/noop' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: '🚨 Vexa 워크플로 실패: ' + ($json.execution && $json.execution.lastNodeExecuted ? $json.execution.lastNodeExecuted : 'unknown') }) }}",
+        "options": {}
+      },
+      "id": "f7777777-7777-4777-8777-777777777777",
+      "name": "알림: 실패",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [470, 720],
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "웹훅: 봇 참석 요청": {
+      "main": [[{ "node": "봇 dispatch (HTTP)", "type": "main", "index": 0 }]]
+    },
+    "웹훅: 회의 종료": {
+      "main": [[{ "node": "인제스트 (HTTP: Vexa전사→회의록)", "type": "main", "index": 0 }]]
+    },
+    "인제스트 (HTTP: Vexa전사→회의록)": {
+      "main": [[{ "node": "알림: 완료", "type": "main", "index": 0 }]]
+    },
+    "에러 트리거": {
+      "main": [[{ "node": "알림: 실패", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "meta": {
+    "description": "Execute Command 불필요(n8n 버전 무관). 웹훅 → HTTP Request로 minutes.server 호출. 서버가 Vexa전사→회의록 생성. MINUTES_SERVER_URL로 서버 주소 지정."
+  }
+}
