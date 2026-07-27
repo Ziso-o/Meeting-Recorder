@@ -25,28 +25,29 @@
 
 ## 2. Vexa 스택 기동 (공식 레포)
 
-Vexa는 다중 컨테이너 스택이라 **공식 레포의 배포 방법을 그대로** 따른다(버전마다 다름).
+Vexa는 다중 컨테이너 스택이다. (요구사양: **Docker ≥ v26**, 최소 **8 vCPU / 16 GB RAM**)
 
 ```bash
-git clone https://github.com/Vexa-ai/vexa.git
-cd vexa
-# 공식 README 지침대로 기동 (예: make all  또는  docker compose up -d)
-# GPU 사용 설정(whisperlive)이 compose에 반영돼 있는지 확인
+git clone https://github.com/Vexa-ai/vexa.git && cd vexa
+make all      # 전체 Docker Compose 스택 기동
+make bot      # 회의 봇 소스 빌드
 ```
 
-- [ ] 스택 기동 성공 (컨테이너들 healthy)
-- [ ] **API 게이트웨이 주소/포트 확인** — 보통 `http://localhost:8056`(게이트웨이),
-      `http://localhost:8057`(관리자). **배포본 README에서 실제 포트 확인 필수.**
-- [ ] **API 키 발급** — Vexa는 관리자 API로 사용자 생성 → API 토큰 발급하는 구조.
-      공식 문서의 "Create user / Get API token" 절차를 따른다.
+- [ ] 스택 기동 성공 (컨테이너 healthy)
+- [ ] **API 키 자동 생성 확인** — `make all` 완료 시 콘솔에 `API key : vxa_...` 출력.
+      → **외부 발급 아님, 로컬 자체 생성.** 이 값을 우리 `.env` `VEXA_API_KEY`에 넣는다.
+- [ ] 포트: **API 게이트웨이 `http://localhost:18056`**, 터미널 UI `http://localhost:13000`.
+- [ ] **전사(STT) 방식 결정 (B2G 중요)**:
+      - (a) vexa.ai/account **무료 전사 토큰** — 간편하나 오디오가 vexa 전사로 나감(민감회의 부적합 가능)
+      - (b) **GPU 전사 유닛까지 셀프호스팅 = 완전 air-gapped** — 외부 0. **B2G/secure는 이쪽.**
 
 ## 3. 우리 스택 연결 (`.env`)
 
 집 GPU PC의 `.env`에 Vexa 실값 + GPU 프리셋을 반영한다:
 ```
 # --- Vexa (실값) ---
-VEXA_API_URL=http://localhost:8056     # 2번에서 확인한 실제 게이트웨이 주소
-VEXA_API_KEY=<발급받은_API_키>
+VEXA_API_URL=http://localhost:18056    # 게이트웨이 기본 포트 18056
+VEXA_API_KEY=vxa_...                    # make all 이 출력한 값
 VEXA_BOT_NAME=회의록봇
 
 # --- GPU 프리셋 (집 PC) ---

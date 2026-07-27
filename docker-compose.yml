@@ -55,7 +55,7 @@ services:
       # 실패 알림용 웹훅 (Slack/Teams 등) — 선택
       - ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL:-}
       # Vexa 봇 연동 (Phase 4)
-      - VEXA_API_URL=${VEXA_API_URL:-http://vexa:8000}
+      - VEXA_API_URL=${VEXA_API_URL:-http://vexa:18056}
       - VEXA_API_KEY=${VEXA_API_KEY:-}
       - VEXA_BOT_NAME=${VEXA_BOT_NAME:-회의록봇}
     volumes:
@@ -70,6 +70,7 @@ services:
   #        https://github.com/Vexa-ai/vexa
   #    아래 항목은 우리 스택과 동일 네트워크에서 Vexa API 게이트웨이를 노출하기 위한
   #    스캐폴드다. `image`를 실제 사용하는 Vexa 게이트웨이 이미지로 교체할 것.
+  #    ⚠️ 실제로는 Vexa 공식 레포(`make all`)로 별도 기동 권장 — 게이트웨이 :18056.
   #    opt-in 프로파일이라 기본 `docker compose up`에서는 뜨지 않는다:
   #        docker compose --profile vexa up -d
   vexa:
@@ -78,7 +79,7 @@ services:
     profiles: ["vexa"]
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "18056:18056"   # Vexa API 게이트웨이 기본 포트
     environment:
       - ADMIN_API_KEY=${VEXA_ADMIN_KEY:-}
     # Vexa 전체 스택(bot-manager, whisperlive, redis, postgres 등)은 공식 compose 참조.

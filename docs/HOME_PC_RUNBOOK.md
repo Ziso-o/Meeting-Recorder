@@ -36,16 +36,18 @@ WHISPER_MODEL=large-v3
 DIARIZER=pyannote
 HF_TOKEN=hf_새토큰
 # Vexa 실값 (A-4에서 확인한 값)
-VEXA_API_URL=http://localhost:8056
-VEXA_API_KEY=<발급키>
+VEXA_API_URL=http://localhost:18056
+VEXA_API_KEY=vxa_...            # make all 이 출력한 값
 VEXA_BOT_NAME=회의록봇
 ```
 > ⚠️ mock 3종(`VEXA_CLIENT`/`LLM_PROVIDER`/`ASR_ENGINE=mock`)은 **넣지 않는다.**
 
-### A-4. Vexa 셀프호스팅 — **필수(봇 경로)**
-- [ ] `git clone https://github.com/Vexa-ai/vexa` → 공식 README대로 기동(WSL2 GPU)
-- [ ] **게이트웨이 주소/포트 확인** → `.env` `VEXA_API_URL`에 반영
-- [ ] **API 키 발급**(Vexa 관리자 API로 사용자·토큰 생성) → `.env` `VEXA_API_KEY`
+### A-4. Vexa 셀프호스팅 — **필수(봇 경로)** · 외부 발급 불필요
+> 요구사양: Docker ≥ v26, 최소 8 vCPU / 16 GB RAM
+- [ ] `git clone https://github.com/Vexa-ai/vexa && cd vexa` → `make all` → `make bot`
+- [ ] `make all` 출력의 **`API key : vxa_...`** 를 `.env` `VEXA_API_KEY`에 (로컬 자동생성, Cloud 아님)
+- [ ] `.env` `VEXA_API_URL=http://localhost:18056` (게이트웨이 기본 포트), UI는 :13000
+- [ ] **전사 방식**: B2G면 **GPU 전사 유닛 셀프호스팅(air-gapped)**, 아니면 vexa.ai 무료 토큰
 - 상세: `docs/VEXA_SELFHOST_WINDOWS.md`
 
 ### A-5. HTTP 서비스 (실값으로)
@@ -90,8 +92,9 @@ Vexa는 **REST API 호출(`POST /bots`)** 을 받으면 **봇(헤드리스 브�
 | Google Meet | `google_meet` | 회의코드 `abc-defg-hij` (meet.google.com/**abc-defg-hij**) | 상대적으로 쉬움(코드만) |
 | Zoom | `zoom` | 회의번호 `12345678901` (+ passcode 필요할 수 있음) | 암호/대기실/봇차단 정책 주의 |
 | Microsoft Teams | `teams` | Teams 회의 링크/ID(길고 복잡, threadId 포함) | 조직 게스트 정책·링크 파싱 주의 |
+| Jitsi | `jitsi` | 방 이름 | 오픈소스 회의 |
 
-> ⚠️ **Vexa가 실제로 어떤 플랫폼을 지원하는지는 버전마다 다르다.** Google Meet은 안정적으로 지원하는 편이고, **Zoom/Teams 지원 여부·형식은 반드시 Vexa 배포본 문서에서 확인**할 것. (우리 코드는 어떤 platform 문자열이든 그대로 넘김)
+> ✅ Vexa 공식 기준 **Google Meet · Teams · Zoom · Jitsi 지원**(platform 값: `google_meet`/`teams`/`zoom`/`jitsi`). 우리 코드는 platform 문자열을 그대로 전달.
 > 공통 난점: 봇이 **대기실 승인**을 받아야 입장되는 경우가 많다. 회의 주최자가 봇 입장을 허용해야 한다.
 
 ## 웹훅 body 예시(플랫폼별)
