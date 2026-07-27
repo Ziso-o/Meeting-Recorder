@@ -12,7 +12,8 @@ class MockVexaClient:
         self.stopped: list[tuple[str, str]] = []
 
     def request_bot(
-        self, platform: str, native_meeting_id: str, language: str = "ko", task: str = "transcribe"
+        self, platform: str, native_meeting_id: str, language: str = "ko",
+        task: str = "transcribe", passcode: str = "",
     ) -> dict[str, Any]:
         self.dispatched.append((platform, native_meeting_id))
         return {

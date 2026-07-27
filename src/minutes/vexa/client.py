@@ -47,6 +47,7 @@ class VexaClient:
         native_meeting_id: str,
         language: str = "ko",
         task: str = "transcribe",
+        passcode: str = "",
     ) -> dict[str, Any]:
         """봇을 회의에 참석시킨다."""
         body = {
@@ -56,6 +57,8 @@ class VexaClient:
             "language": language,
             "task": task,
         }
+        if passcode:
+            body["passcode"] = passcode  # Zoom 등. Vexa 버전에 따라 필드명 다를 수 있음
         with self._client() as c:
             r = c.post("/bots", json=body)
             r.raise_for_status()

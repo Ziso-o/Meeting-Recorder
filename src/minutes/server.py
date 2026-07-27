@@ -28,7 +28,7 @@ from .chain import generate_minutes
 from .config import load_dotenv, provider_for_profile
 from .glossary import load_glossary
 from .render import render_markdown
-from .vexa import select_vexa_client, vexa_to_segments
+from .vexa import parse_meeting_url, select_vexa_client, vexa_to_segments
 
 
 def _meeting(body: dict) -> str:
@@ -78,10 +78,18 @@ def ep_health(_body: dict) -> dict:
 
 
 def ep_bot_dispatch(body: dict) -> dict:
+    # 링크만 보내면 자동 파싱("링크 보내면 참가"). url 없으면 platform+meeting 직접 사용.
+    passcode = body.get("passcode", "")
+    if body.get("url"):
+        parsed = parse_meeting_url(body["url"])
+        platform = parsed["platform"]
+        meeting = parsed["native_meeting_id"]
+        passcode = passcode or parsed.get("passcode", "")
+    else:
+        platform = body.get("platform", "google_meet")
+        meeting = _meeting(body)
     client = select_vexa_client()
-    return client.request_bot(
-        body.get("platform", "google_meet"), _meeting(body), language=body.get("language", "ko")
-    )
+    return client.request_bot(platform, meeting, language=body.get("language", "ko"), passcode=passcode)
 
 
 def ep_bot_stop(body: dict) -> dict:

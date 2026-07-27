@@ -13,8 +13,9 @@ from __future__ import annotations
 import os
 
 from .convert import vexa_to_segments
+from .meeting_url import parse_meeting_url
 
-__all__ = ["vexa_to_segments", "select_vexa_client"]
+__all__ = ["vexa_to_segments", "parse_meeting_url", "select_vexa_client"]
 
 
 def select_vexa_client():

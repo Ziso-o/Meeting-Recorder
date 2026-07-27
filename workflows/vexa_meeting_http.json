@@ -21,7 +21,7 @@
         "url": "={{ ($env.MINUTES_SERVER_URL || 'http://127.0.0.1:8900') + '/bot/dispatch' }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ platform: ($json.body.platform || 'google_meet'), meeting: $json.body.meetingId }) }}",
+        "jsonBody": "={{ JSON.stringify($json.body.url ? { url: $json.body.url } : { platform: ($json.body.platform || 'google_meet'), meeting: $json.body.meetingId }) }}",
         "options": {}
       },
       "id": "f2222222-2222-4222-8222-222222222222",

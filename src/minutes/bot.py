@@ -21,7 +21,7 @@ from .chain import generate_minutes
 from .config import load_dotenv, provider_for_profile
 from .glossary import load_glossary
 from .render import render_markdown
-from .vexa import select_vexa_client, vexa_to_segments
+from .vexa import parse_meeting_url, select_vexa_client, vexa_to_segments
 
 
 def _print(obj) -> None:
@@ -30,8 +30,18 @@ def _print(obj) -> None:
 
 def cmd_request(args) -> int:
     client = select_vexa_client()
-    print(f"봇 참석 요청: name={client.bot_name}, {args.platform}/{args.meeting}")
-    _print(client.request_bot(args.platform, args.meeting, language=args.language))
+    passcode = ""
+    if getattr(args, "url", ""):
+        parsed = parse_meeting_url(args.url)
+        platform, meeting = parsed["platform"], parsed["native_meeting_id"]
+        passcode = parsed.get("passcode", "")
+    else:
+        if not args.meeting:
+            print("오류: --url(회의 링크) 또는 --meeting(회의 ID) 중 하나가 필요합니다.")
+            return 2
+        platform, meeting = args.platform, args.meeting
+    print(f"봇 참석 요청: name={client.bot_name}, {platform}/{meeting}")
+    _print(client.request_bot(platform, meeting, language=args.language, passcode=passcode))
     return 0
 
 
@@ -97,8 +107,10 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--platform", default="google_meet", help="회의 플랫폼")
         p.add_argument("--meeting", "-m", required=True, help="회의 ID(native_meeting_id)")
 
-    p_req = sub.add_parser("request", help="봇 참석 요청")
-    add_common(p_req)
+    p_req = sub.add_parser("request", help="봇 참석 요청(링크 또는 회의ID)")
+    p_req.add_argument("--url", default="", help="회의 링크(주면 platform/ID 자동 파싱)")
+    p_req.add_argument("--platform", default="google_meet", help="회의 플랫폼(--url 없을 때)")
+    p_req.add_argument("--meeting", "-m", default="", help="회의 ID(--url 없을 때)")
     p_req.add_argument("--language", default="ko")
     p_req.set_defaults(func=cmd_request)
 
