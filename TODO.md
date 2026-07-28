@@ -108,31 +108,35 @@
 - [ ] 실물 전환: 서비스 env를 실제(VEXA/HF/GPU)로, 워크플로는 그대로(서버주소만 집 PC)
 - 참고: `vexa_meeting.json`/`_local.json`(executeCommand)·docker-compose는 보존만.
 
-## 6. Vexa 봇 (P2 — 보류 결정 필요)
+## 6. Vexa 봇 — 셀프호스팅 확정 (외부 API 불필요)
 
-- [x] mock ingest 검증 완료(`VEXA_CLIENT=mock`)
-- [ ] **결정**: Vexa는 다중 컨테이너 Docker → 정책 충돌. (A) 봇 없이 수동 녹음 →
-      watch/파이프라인 운영 / (B) Docker 예외 호스트 승인. 상세 `docs/STACK_MANUAL_TDL.md`
+- [x] mock ingest 검증(`VEXA_CLIENT=mock`) + HTTP 서비스 e2e 검증
+- [x] **회의 링크 자동 파싱** — `parse_meeting_url`(Meet/Zoom/Jitsi/Teams). "링크만 보내면 참가"
+      (웹훅 `{url}` / `bot request --url`). Zoom passcode 파싱 포함.
+- [x] **방식 확정: 공식 레포 셀프호스팅.** `make all`이 로컬 키(`vxa_...`) 자동생성 → Cloud 발급 X.
+      게이트웨이 :18056, UI :13000. 전사 GPU 유닛 셀프호스팅 시 완전 air-gapped(B2G).
+- [ ] **집 GPU PC에서 실제 Vexa 기동 + 실회의 봇 참가 1건** (mock 졸업) ← 다음 관문
+- [ ] 실회의 검증: Meet(쉬움) / Zoom(passcode·대기실) / Teams(id 형식) / 대기실 승인
 
 ## 7. 파생 작업
 
-- [ ] (a) **`diarize.py` Windows 수정 반영** (최우선, 위 ★ 참조 — 원본 파일 필요)
-- [ ] (b) **n8n 네이티브 워크플로우** `workflows/*_local.json` (도커 경로 제거)
-- [ ] (c) **git push/계보 정합** (위 ★ 참조)
+- [x] (a) `diarize.py` Windows 수정 반영 (Cowork 검증본)
+- [x] (b) n8n 워크플로 — HTTP 정본(`vexa_meeting_http.json`) + 네이티브(`_local.json`)
+- [x] (c) git push/계보 정합 — 브랜치 정본 단일화
 - [ ] (d) 폐쇄망 wheelhouse 설치 절차(선택)
 
-## 8. 클라우드 배포 (P2 — 로컬 검증 완료 후)
+## 8. 클라우드 배포 (Phase B — 집 PC 검증 후, Vultr 등)
 
-> ⚠️ 클라우드 GPU 인스턴스·관리형 서비스는 **비용 발생** — 무료 제약과 충돌하므로 후순위.
+> ⚠️ 클라우드 GPU 인스턴스는 비용 발생. 집 PC(Phase A) 검증 완료 후 이관.
 
-- [ ] 무료/저비용 옵션 우선 조사: 자체 서버(온프레미스) / 무료 크레딧 한도 내 VM / 학교·기관 GPU
-- [ ] 외부 노출 시 n8n/Vexa 인증·방화벽
+- [ ] Vultr 등 GPU 인스턴스로 동일 스택(Vexa+서비스+n8n) 이관 + 시크릿/도메인/보안
+- [ ] 외부 노출 시 n8n/Vexa 인증·방화벽, (B2G 실운영) 망분리/CSAP
 
 ---
 
 ## 즉시 착수 후보 (다음 액션)
 
-1. **★ diarize.py 정합** — 사용자 원본(Cowork) 파일 확보 → 브랜치 반영 (§7-a). **최우선.**
-2. **계보 정합 결정** (§★) — 로컬 `main` vs 브랜치 단일화 방침 확정.
-3. **watch 상시 실행** — `python -m minutes.watch --profile secure` (무인 자동화 1차, Docker 불필요).
-4. (완료) `.env` 파서·soundfile·gitignore·watch — 이번 세션 반영.
+1. **집 GPU PC 셋업** — `bash scripts/home_pc_setup.sh` (venv/설치/ollama/.env/pytest 자동).
+2. **Vexa 셀프호스팅** — `git clone vexa && make all && make bot` → `vxa_` 키를 `.env`에.
+3. **실회의 봇 참가 1건** — `bot request --url "<회의링크>"` → mock 졸업.
+4. (완료) 링크 파서·HTTP 서비스·Vexa 실정보(포트 18056)·.env 턴키 — 이번 세션 반영.

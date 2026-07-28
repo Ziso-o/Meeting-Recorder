@@ -3,16 +3,18 @@
 온라인 회의 오디오 → **전사 / 화자분리** → **LLM 회의록(JSON + Markdown)** 자동 생성.
 **n8n**이 오케스트레이션하고 **Vexa 봇**이 회의에 자동 참석한다.
 
-> 상세 설계·규칙·현재 상태는 [`CLAUDE.md`](./CLAUDE.md), 사람이 직접 해야 하는 준비 작업은
-> [`docs/MANUAL_SETUP.md`](./docs/MANUAL_SETUP.md)를 참고.
+> 상세 설계·규칙은 [`CLAUDE.md`](./CLAUDE.md) · 최종 클라우드 로드맵은
+> [`docs/TARGET_CLOUD_TDL.md`](./docs/TARGET_CLOUD_TDL.md) · 집 GPU PC 셋업은
+> [`docs/HOME_PC_RUNBOOK.md`](./docs/HOME_PC_RUNBOOK.md) 참고.
 
 ## 스택 (전부 무료 / 오픈소스)
 
-- **오케스트레이션**: n8n Community Edition (Docker)
-- **전사**: faster-whisper large-v3 (로컬) / Groq (fallback)
-- **화자분리**: pyannote.audio 3.1
-- **LLM**: Ollama(로컬, 민감회의) / Gemini Flash(내부회의) — 어댑터 교체 가능
-- **봇 참석**: Vexa (셀프호스팅)
+- **오케스트레이션**: n8n Community Edition — **HTTP Request 노드**로 우리 서비스 호출
+  (Execute Command 미의존 → n8n 버전 무관, Docker/네이티브/클라우드 공용)
+- **전사**: faster-whisper large-v3 (로컬 GPU) / 실시간은 Vexa 내장 STT
+- **화자분리**: pyannote.audio 3.1 (파일) / Vexa 내장(실시간)
+- **LLM**: Ollama(로컬) — 회의록 작성 필수 / Gemini(선택, internal)
+- **봇 참석**: **Vexa 셀프호스팅**(`make all`, 게이트웨이 :18056) — Cloud 발급 불필요
 - **언어 / 의존성**: Python 3.11 / uv
 
 ## 보안등급 분기 (B2G 공공사업)
@@ -22,12 +24,18 @@
 | `secure` | Ollama (로컬) | faster-whisper (로컬 GPU) | **민감 회의** — 외부 유출 없음 |
 | `internal` | Gemini (클라우드) | Groq (클라우드) | 내부 회의 |
 
-## 진행 상태 (Phase 1–4 전부 완료)
+## 진행 상태
+
+**Phase 1–4 코드 완료 + 오케스트레이션 검증(mock).** pytest 51개 통과.
 
 - ✅ **Phase 1** — 회의록 생성기: 3단 LLM 체인(용어교정→청크요약→통합) + pydantic 검증 + Ollama/Gemini 어댑터
-- ✅ **Phase 2** — 전사 엔진: ffmpeg→faster-whisper(Groq 폴백)→pyannote 화자분리→병합 + CER 스크립트
-- ✅ **Phase 3** — 결합 파이프라인 + n8n 워크플로우 + docker-compose(n8n/ollama)
-- ✅ **Phase 4** — Vexa 봇 참석 연동 + 봇 dispatch/ingest CLI + Vexa↔Phase2 A/B 비교
+- ✅ **Phase 2** — 전사 엔진: ffmpeg→faster-whisper→pyannote 화자분리→병합 + CER 스크립트 (실오디오 검증)
+- ✅ **Phase 3** — 결합 파이프라인 + `minutes.watch`(폴더 무인) + n8n 워크플로우
+- ✅ **Phase 4** — Vexa 봇 연동 + **회의 링크 자동 파싱**("링크만 보내면 참가") + A/B 비교
+- ✅ **n8n 오케스트레이션(HTTP)** — 웹훅→`minutes.server`→회의록 생성까지 **mock e2e 검증 완료**
+- 🔜 **실물 전환** — 집 GPU PC에 Vexa 셀프호스팅 + Ollama(실제 봇 참가) → 이후 Vultr 이관
+
+> 상세 TDL: [`TODO.md`](./TODO.md)
 
 ---
 
@@ -67,7 +75,7 @@ python -m venv .venv
 .venv/Scripts/python -m pip install -e ".[dev]"    # Windows (.venv/Scripts)
 # .venv/bin/python -m pip install -e ".[dev]"       # Linux/macOS (.venv/bin)
 
-.venv/Scripts/python -m pytest -q                   # 32 passed 여야 정상 (Windows)
+.venv/Scripts/python -m pytest -q                   # 51 passed 여야 정상 (Windows)
 
 # 오프라인 전체 체인 (transcribe → generate) — 실제 모델/키 불필요
 touch demo.m4a
@@ -157,7 +165,10 @@ python scripts/cer.py --ref reference.txt --hyp meeting.transcript.json
 ## 3-5. Vexa 봇 제어 — `minutes.bot` (Phase 4)
 
 ```bash
-python -m minutes.bot request    --platform google_meet --meeting abc-defg-hij   # 봇 참석
+# 회의 링크만 주면 platform/ID 자동 파싱해서 봇 참석 (Meet/Zoom/Jitsi/Teams)
+python -m minutes.bot request    --url "https://meet.google.com/abc-defg-hij"
+# 또는 platform+ID 직접
+python -m minutes.bot request    --platform google_meet --meeting abc-defg-hij
 python -m minutes.bot transcript --platform google_meet --meeting abc-defg-hij --out mtg
 python -m minutes.bot ingest     --platform google_meet --meeting abc-defg-hij --profile internal --out mtg
 python -m minutes.bot stop       --platform google_meet --meeting abc-defg-hij   # 봇 종료
@@ -186,29 +197,34 @@ python -m minutes.watch --once --profile secure    # 한 번만 스캔(작업 �
 
 ---
 
-# 3.6. n8n 연동 (HTTP 서비스 — 권장, n8n 버전 무관)
+# 3.6. n8n 연동 (HTTP 서비스 — ✅ 검증된 정본, n8n 버전 무관)
 
-n8n의 Execute Command 노드는 버전에 따라 미지원이라, **HTTP 서비스**를 띄우고
-n8n은 HTTP Request로 호출한다. (Docker·네이티브·클라우드 모두 동일)
+n8n의 Execute Command 노드는 최신 버전에서 미지원(2.8.4 확인)이라, **HTTP 서비스**를
+띄우고 n8n은 **HTTP Request 노드**로 호출한다. (Docker·네이티브·클라우드 공용)
 
 ```bash
-# 1) HTTP 서비스 기동 (mock 개발: 회사 노트북)
+# 1) HTTP 서비스 기동 (mock 개발: 회사 노트북 / 실구동: 집 GPU PC는 mock 제거)
 VEXA_CLIENT=mock LLM_PROVIDER=mock python -m minutes.server     # 127.0.0.1:8900
 #   GET /health, POST /bot/dispatch|/bot/stop|/ingest|/pipeline
 
 # 2) n8n에 workflows/vexa_meeting_http.json import → Active
-#    (n8n이 다른 호스트면 MINUTES_SERVER_URL 로 서버 주소 지정)
+#    n8n 실행 전: export MINUTES_SERVER_URL="http://127.0.0.1:8900"
 
-# 3) 웹훅 테스트
+# 3-a) 봇 참석 — 회의 링크만 웹훅으로 (자동 파싱 → Vexa 참가)
+curl -X POST http://localhost:5678/webhook/bot-dispatch \
+  -H "Content-Type: application/json" -d '{"url":"https://meet.google.com/abc-defg-hij"}'
+
+# 3-b) 회의 종료 → 전사 인제스트 → 회의록
 curl -X POST http://localhost:5678/webhook/meeting-end \
-  -H "Content-Type: application/json" -d '{"meetingId":"testid","profile":"secure"}'
-# → 서비스가 Vexa(mock) 전사 → 회의록을 data/out/secure/ 에 생성
+  -H "Content-Type: application/json" -d '{"meetingId":"abc-defg-hij","profile":"secure"}'
+# → 서비스가 Vexa 전사 → 회의록을 data/out/secure/ 에 생성
 ```
-> 서비스만 단독 확인: `curl -X POST http://127.0.0.1:8900/ingest -H "Content-Type: application/json" -d '{"meetingId":"testid","profile":"secure"}'`
+> 서비스 단독 확인: `curl -X POST http://127.0.0.1:8900/ingest -H "Content-Type: application/json" -d '{"meetingId":"testid","profile":"secure"}'`
+> 흐름: **웹훅(트리거) → HTTP Request → `minutes.server` → Vexa REST → 봇 참가/전사 → LLM 회의록**.
 
 ---
 
-# 4. n8n 로컬 실행 (Docker 오케스트레이션 — 참고)
+# 4. n8n 로컬 실행 (Docker Execute Command 방식 — 참고용 보존)
 
 CLI를 손으로 돌리는 대신, n8n이 **폴더 감시/웹훅 → 전사 → 생성 → 보안분기 → 배포**를 자동화한다.
 
@@ -276,20 +292,23 @@ curl -X POST http://localhost:5678/webhook/meeting-audio \
 
 ---
 
-# 5. Vexa 봇 자동 참석 (Phase 4)
+# 5. Vexa 봇 자동 참석 (셀프호스팅 — 외부 API 발급 불필요)
+
+Vexa는 **공식 레포를 셀프호스팅**한다. Vexa Cloud 계정/토큰 불필요 —
+`make all`이 로컬에서 API 키(`vxa_...`)를 자동 생성한다.
 
 ```bash
-# Vexa 스택 포함 기동 (opt-in 프로파일). 실제 게이트웨이 이미지로 VEXA_IMAGE 교체 필요.
-docker compose --profile vexa up -d
+git clone https://github.com/Vexa-ai/vexa.git && cd vexa
+make all      # 전체 스택(게이트웨이 :18056, UI :13000). 출력의 vxa_ 키를 .env 에
+make bot      # 회의 봇
 ```
-- 운영 배포는 [Vexa 공식 레포](https://github.com/Vexa-ai/vexa)의 다중 컨테이너 스택 권장.
-- n8n `vexa_meeting.json` 워크플로우:
-  - `POST /webhook/bot-dispatch` `{"platform":"google_meet","meetingId":"abc-defg-hij"}` → 봇 참석
-  - `POST /webhook/meeting-end` `{"meetingId":"abc-defg-hij","profile":"internal"}` → 전사 인제스트 → 회의록
+- 요구사양: Docker ≥ v26, 8 vCPU / 16 GB RAM. 전사 GPU 유닛까지 셀프호스팅하면 **완전 air-gapped**(B2G).
+- 지원 플랫폼: `google_meet` · `zoom` · `teams` · `jitsi`.
+- 상세: [`docs/VEXA_SELFHOST_WINDOWS.md`](./docs/VEXA_SELFHOST_WINDOWS.md).
 
 ```bash
-# 봇 참석 요청 예시 (n8n 없이 CLI로도 가능)
-VEXA_BOT_NAME="회의록봇" python -m minutes.bot request --platform google_meet --meeting abc-defg-hij
+# 봇 참석 — 링크만 (CLI). n8n 없이도 가능
+python -m minutes.bot request --url "https://meet.google.com/abc-defg-hij"
 ```
 
 ---
@@ -297,7 +316,7 @@ VEXA_BOT_NAME="회의록봇" python -m minutes.bot request --platform google_mee
 # 6. 개발 / 테스트
 
 ```bash
-.venv/bin/python -m pytest -q                    # 26개 (mock으로 네트워크·GPU·오디오 없이 e2e)
+.venv/bin/python -m pytest -q                    # 51개 (mock으로 네트워크·GPU·오디오 없이 e2e)
 .venv/bin/python -m ruff check src tests scripts # 린트
 ```
 - 오프라인 데모: `ASR_ENGINE=mock DIARIZER=mock`, `LLM_PROVIDER=mock`, `VEXA_CLIENT=mock`
@@ -311,10 +330,23 @@ src/minutes/
 ├── generate.py / chain.py / schema.py / render.py   # Phase 1 회의록 생성
 ├── providers/ (ollama·gemini·mock)                  # LLM 어댑터
 ├── transcribe.py / asr/ (audio·whisper·groq·diarize·merge)  # Phase 2 전사
-├── pipeline.py                                      # Phase 3 결합
-├── bot.py / vexa/ (client·convert·mock)             # Phase 4 봇
+├── pipeline.py / watch.py                           # Phase 3 결합 + 폴더 무인
+├── bot.py / vexa/ (client·convert·meeting_url·mock) # Phase 4 봇 + 링크 파서
+├── server.py                                        # n8n용 HTTP 서비스
 ├── config.py / glossary.py                          # 설정·용어집
-prompts/ (01·02·03.md)   glossary.yaml   scripts/ (cer·ab_transcribe)
-workflows/ (meeting_minutes·vexa_meeting.json)   docker/ (Dockerfile.n8n)
-docker-compose.yml   docs/MANUAL_SETUP.md
+prompts/ (01·02·03.md)   glossary.yaml
+scripts/ (cer·ab_transcribe·run_local·run_watch·home_pc_setup)
+workflows/ (meeting_minutes·vexa_meeting·vexa_meeting_http·_local.json)
+docs/ (TARGET_CLOUD_TDL·HOME_PC_RUNBOOK·VEXA_SELFHOST_WINDOWS·RUN_24_7·MANUAL_SETUP·STACK_MANUAL_TDL)
+docker-compose.yml   docker/ (Dockerfile.n8n)
 ```
+
+## 문서 가이드
+
+| 문서 | 내용 |
+|---|---|
+| [`docs/TARGET_CLOUD_TDL.md`](./docs/TARGET_CLOUD_TDL.md) | 최종 클라우드/Vexa 아키텍처 + 육하원칙 TDL |
+| [`docs/HOME_PC_RUNBOOK.md`](./docs/HOME_PC_RUNBOOK.md) | 집 GPU PC 셋업→n8n + Vexa 참석 원리 + 필수 모델 |
+| [`docs/VEXA_SELFHOST_WINDOWS.md`](./docs/VEXA_SELFHOST_WINDOWS.md) | Vexa 셀프호스팅(Docker/WSL2/GPU) |
+| [`docs/RUN_24_7.md`](./docs/RUN_24_7.md) | 24/7 무인 운영(작업 스케줄러) |
+| [`docs/MANUAL_SETUP.md`](./docs/MANUAL_SETUP.md) · [`docs/STACK_MANUAL_TDL.md`](./docs/STACK_MANUAL_TDL.md) | 수동 준비 작업 · 스택별 TDL |
