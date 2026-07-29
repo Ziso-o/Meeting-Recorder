@@ -152,76 +152,52 @@ sudo apt install ffmpeg             # 또는 brew install ffmpeg (로컬 실행 
 
 # 3. CLI 사용법 (실제 구동)
 
-각 단계는 CLI로 독립 실행 가능하다. n8n은 이 CLI를 **호출만** 한다.
-
-## 3-1. 회의록 생성 — `minutes.generate` (전사 텍스트 → 회의록)
+각 단계는 CLI로 독립 실행 가능하다. n8n은 이 CLI(또는 `minutes.server`)를 **호출만** 한다.
+`python`은 venv 파이썬(`.venv/Scripts/python` 또는 `.venv/bin/python`)을 뜻한다.
 
 ```bash
-# 내부 회의 (Gemini)
-python -m minutes.generate --input meeting.transcript.json --profile internal
-# 민감 회의 (로컬 Ollama)
+# ── 회의록 생성: 전사 텍스트 → 회의록 (minutes.generate) ──
+#   profile: internal=Gemini(클라우드) / secure=로컬 Ollama
+#   입력 JSON: [{speaker,start,end,text}] 또는 {"meta":{...},"segments":[...]}
+#   산출물: <stem>.minutes.json + <stem>.minutes.md
 python -m minutes.generate --input meeting.transcript.json --profile secure
-# 산출물: meeting.minutes.json + meeting.minutes.md
-```
-입력 JSON 형식: `[{speaker,start,end,text}]` 또는 `{"meta":{...},"segments":[...]}`
 
-## 3-2. 전사 — `minutes.transcribe` (오디오 → 화자라벨 전사 JSON)
+# ── 전사: 오디오 → 화자라벨 전사 JSON (minutes.transcribe) ──
+#   GPU 있으면 faster-whisper, 없으면 GROQ_API_KEY로 폴백. 산출물: <stem>.transcript.json
+python -m minutes.transcribe --audio meeting.m4a --title "착수회의" --date 2026-07-14
 
-```bash
-python -m minutes.transcribe --audio meeting.m4a --title "관제사업 착수회의" --date 2026-07-14
-# GPU 있으면 faster-whisper, 없으면 GROQ_API_KEY로 폴백
-# 산출물: meeting.transcript.json  (그대로 generate 입력이 됨)
-```
+# ── 결합 파이프라인: 오디오 → 회의록 한 번에 (minutes.pipeline) ──
+#   위 transcribe + generate 를 한 번에. 산출물: transcript.json + minutes.json/.md
+python -m minutes.pipeline --audio meeting.m4a --profile secure
 
-## 3-3. 결합 파이프라인 — `minutes.pipeline` (오디오 → 회의록 한 번에)
+# ── 무인 자동화: 폴더 감시 (minutes.watch) ──
+#   data/incoming 에 오디오 넣으면 자동 처리 → data/out, 처리분 data/done. n8n 불필요.
+python -m minutes.watch --profile secure          # 상시 감시(Ctrl+C 종료)
+python -m minutes.watch --once --profile secure   # 1회 스캔(작업 스케줄러/크론용)
 
-```bash
-python -m minutes.pipeline --audio meeting.m4a --profile internal --title "..." --date 2026-07-14
-# 산출물: meeting.transcript.json + meeting.minutes.json + meeting.minutes.md
-```
-
-## 3-4. 전사 품질 측정 — `scripts/cer.py`
-
-```bash
-python scripts/cer.py --ref reference.txt --hyp meeting.transcript.json
-```
-
-## 3-5. Vexa 봇 제어 — `minutes.bot` (Phase 4)
-
-```bash
-# 회의 링크만 주면 platform/ID 자동 파싱해서 봇 참석 (Meet/Zoom/Jitsi/Teams)
+# ── Vexa 봇 제어 (minutes.bot) ──
+#   request: 링크만 주면 platform/ID 자동 파싱 후 봇 참석 (Meet/Zoom/Teams/Jitsi)
 python -m minutes.bot request    --url "https://meet.google.com/abc-defg-hij"
-# 또는 platform+ID 직접
-python -m minutes.bot request    --platform google_meet --meeting abc-defg-hij
-python -m minutes.bot transcript --platform google_meet --meeting abc-defg-hij --out mtg
-python -m minutes.bot ingest     --platform google_meet --meeting abc-defg-hij --profile internal --out mtg
+python -m minutes.bot request    --platform google_meet --meeting abc-defg-hij   # 직접 지정도 가능
+python -m minutes.bot transcript --platform google_meet --meeting abc-defg-hij --out mtg   # 전사만 저장
+python -m minutes.bot ingest     --platform google_meet --meeting abc-defg-hij --profile secure --out mtg  # 전사→회의록
 python -m minutes.bot stop       --platform google_meet --meeting abc-defg-hij   # 봇 종료
-# ingest = Vexa 전사 조회 → Segment 변환 → 회의록 생성(mtg.minutes.json/.md)
+
+# ── 품질 측정 스크립트 ──
+python scripts/cer.py --ref reference.txt --hyp meeting.transcript.json                 # 전사 CER
+python scripts/ab_transcribe.py --vexa mtg.vexa.json --ours mtg.transcript.json --ref ref.txt  # Vexa vs Phase2 A/B
+
+# ── n8n용 HTTP 서비스 (minutes.server) — 계속 켜둠 ──
+#   엔드포인트: GET /health, POST /bot/dispatch|/bot/stop|/ingest|/pipeline
+python -m minutes.server                          # 127.0.0.1:8900 (MINUTES_SERVER_PORT로 변경)
 ```
 
-## 3-6. Vexa vs Phase 2 전사 A/B — `scripts/ab_transcribe.py`
-
-```bash
-python scripts/ab_transcribe.py --vexa mtg.vexa.json --ours mtg.transcript.json --ref ref.txt
-```
+> 오프라인(키·GPU 없이 배관 확인): 위 명령 앞에
+> `ASR_ENGINE=mock DIARIZER=mock LLM_PROVIDER=mock VEXA_CLIENT=mock` 를 붙인다.
 
 ---
 
-# 3.5. 무인 자동화 — 폴더 감시 `minutes.watch` (Docker 불필요)
-
-n8n 없이도 폴더만 감시해 자동으로 회의록을 만든다. **Windows 네이티브/무료·로컬**에 적합.
-
-```bash
-python -m minutes.watch --profile secure          # data/incoming 감시 → 자동 처리
-# data/incoming 에 오디오 투입 → data/out 에 회의록, 처리분은 data/done 으로 이동(실패 data/failed)
-python -m minutes.watch --once --profile secure    # 한 번만 스캔(작업 스케줄러/크론용)
-```
-- 업로드 중 미완성 파일을 건드리지 않도록 **파일 크기 안정화 후** 처리.
-- 옵션: `--incoming/--out/--done/--failed/--interval/--profile/--glossary`.
-
----
-
-# 3.6. n8n 연동 (HTTP 서비스 — ✅ 검증된 정본, n8n 버전 무관)
+# 3.5. n8n 연동 (HTTP 서비스 — ✅ 검증된 정본, n8n 버전 무관)
 
 n8n의 Execute Command 노드는 최신 버전에서 미지원(2.8.4 확인)이라, **HTTP 서비스**를
 띄우고 n8n은 **HTTP Request 노드**로 호출한다. (Docker·네이티브·클라우드 공용)
