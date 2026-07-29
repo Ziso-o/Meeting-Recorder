@@ -41,6 +41,43 @@ def test_meeting_field_missing_raises():
         server._meeting({"platform": "google_meet"})
 
 
+def test_ep_status_mock(monkeypatch):
+    monkeypatch.setenv("VEXA_CLIENT", "mock")
+    res = server.ep_status({})
+    assert res["ok"] is True and "vexa" in res
+
+
+def test_ep_files_and_file(tmp_path, monkeypatch):
+    monkeypatch.setenv("MINUTES_HOME", str(tmp_path))
+    d = tmp_path / "data" / "out" / "secure"
+    d.mkdir(parents=True)
+    (d / "vexa_m1.minutes.md").write_text("# 회의록\n결정1", encoding="utf-8")
+    (d / "vexa_m1.transcript.json").write_text('{"segments":[]}', encoding="utf-8")
+    (d / "vexa_m1.minutes.json").write_text("{}", encoding="utf-8")  # 목록에서 제외돼야
+
+    files = server.ep_files({})["files"]
+    kinds = sorted(f["kind"] for f in files)
+    assert kinds == ["minutes", "transcript"]  # minutes.json 은 제외
+
+    md = next(f for f in files if f["kind"] == "minutes")
+    got = server.ep_file({"path": md["path"]})
+    assert "회의록" in got["content"]
+
+
+def test_ep_file_path_traversal_blocked(tmp_path, monkeypatch):
+    import pytest
+
+    monkeypatch.setenv("MINUTES_HOME", str(tmp_path))
+    (tmp_path / "data").mkdir()
+    with pytest.raises(ValueError):
+        server.ep_file({"path": "../../etc/passwd"})
+
+
+def test_dashboard_has_nav():
+    for label in ("회의 참석", "상태 모니터링", "녹취파일", "회의록"):
+        assert label in server.INDEX_HTML
+
+
 def test_http_workflow_uses_http_not_execute_command():
     wf = json.loads(HTTP_WF.read_text(encoding="utf-8"))
     types = {n["type"] for n in wf["nodes"]}
