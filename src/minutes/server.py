@@ -130,6 +130,39 @@ def ep_pipeline(body: dict) -> dict:
     return _result(stem, segments, minutes)
 
 
+INDEX_HTML = """<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>회의록 봇</title><style>
+ body{font-family:system-ui,sans-serif;max-width:640px;margin:32px auto;padding:0 16px}
+ h1{font-size:20px} h2{font-size:15px;margin-top:24px}
+ input,select,button{font-size:15px;padding:8px;margin:4px 0;width:100%;box-sizing:border-box}
+ button{background:#2563eb;color:#fff;border:0;border-radius:6px;cursor:pointer;width:auto;padding:8px 16px}
+ fieldset{border:1px solid #ccc;border-radius:8px;margin:12px 0}
+ pre{background:#f4f4f5;padding:12px;border-radius:6px;white-space:pre-wrap;word-break:break-all}
+</style></head><body>
+<h1>🤖 회의록 봇</h1>
+<fieldset><legend><b>봇 참석</b></legend>
+ <p>회의 링크를 붙여넣고 참석시키세요 (Meet/Zoom/Teams/Jitsi).</p>
+ <input id="url" placeholder="https://meet.google.com/abc-defg-hij">
+ <button onclick="call('/bot/dispatch',{url:v('url')})">봇 참석</button>
+</fieldset>
+<fieldset><legend><b>회의록 생성 (회의 종료 후)</b></legend>
+ <input id="mid" placeholder="회의 ID (예: abc-defg-hij)">
+ <select id="profile"><option value="secure">secure (로컬)</option><option value="internal">internal</option></select>
+ <button onclick="call('/ingest',{meeting:v('mid'),profile:v('profile')})">회의록 생성</button>
+</fieldset>
+<h2>결과</h2><pre id="out">대기 중…</pre>
+<script>
+ function v(id){return document.getElementById(id).value.trim()}
+ async function call(path,body){
+   const out=document.getElementById('out'); out.textContent='요청 중…';
+   try{const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+       out.textContent=JSON.stringify(await r.json(),null,2);}
+   catch(e){out.textContent='오류: '+e}
+ }
+</script></body></html>"""
+
+
 ROUTES: dict[tuple[str, str], Callable[[dict], dict]] = {
     ("GET", "/health"): ep_health,
     ("POST", "/bot/dispatch"): ep_bot_dispatch,
@@ -165,7 +198,18 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:  # 복구 가능: 오류를 JSON으로 반환(오케스트레이터가 재시도/알림)
             self._send(500, {"ok": False, "error": str(e)})
 
+    def _send_html(self, html: str) -> None:
+        data = html.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_GET(self) -> None:  # noqa: N802
+        if self.path.split("?", 1)[0] in ("/", "/index.html"):
+            self._send_html(INDEX_HTML)
+            return
         self._dispatch("GET")
 
     def do_POST(self) -> None:  # noqa: N802
@@ -181,6 +225,7 @@ def main(argv: list[str] | None = None) -> int:
     port = int(os.environ.get("MINUTES_SERVER_PORT", "8900"))
     httpd = ThreadingHTTPServer((host, port), Handler)
     print(f"minutes.server 시작: http://{host}:{port}  (Ctrl+C 종료)")
+    print(f"  웹 UI: http://{host}:{port}/  (브라우저에서 링크 붙여넣고 참석)")
     print("  라우트:", ", ".join(f"{m} {p}" for (m, p) in ROUTES))
     try:
         httpd.serve_forever()

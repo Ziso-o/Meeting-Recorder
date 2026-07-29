@@ -35,6 +35,16 @@ def test_teams_best_effort():
     assert r["platform"] == "teams"
 
 
+def test_teams_live_extracts_id():
+    r = parse_meeting_url("https://teams.live.com/meet/937518080098?p=Be3vcnvLc4bNyf06Cz")
+    assert r["platform"] == "teams"
+    assert r["native_meeting_id"] == "937518080098"
+
+
+def test_server_has_web_ui():
+    assert "봇 참석" in server.INDEX_HTML and "/bot/dispatch" in server.INDEX_HTML
+
+
 def test_unknown_url_raises():
     with pytest.raises(ValueError):
         parse_meeting_url("https://example.com/whatever")
