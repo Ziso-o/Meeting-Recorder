@@ -46,10 +46,14 @@ uv venv && uv pip install -e ".[transcribe]"     # uv 없으면: python -m venv 
 .venv/Scripts/python -m pytest -q                # 51 passed 확인
 ```
 
-> - Git Bash는 경로에 **슬래시 `/`**. venv 파이썬 = `.venv/Scripts/python`(Win) / `.venv/bin/python`(Linux·mac).
-> - `[transcribe]` = torch/faster-whisper/pyannote(무거움, **파일 전사**용). Vexa 봇 경로만이면 `[dev]`로 충분.
-> - 파일 전사엔 **ffmpeg** 필요: `winget install Gyan.FFmpeg` / `apt install ffmpeg`.
-> - `No module named 'minutes'` → 패키지를 venv에 `-e` 설치 후 **venv python**으로 실행해야 함.
+> - **⚠️ 실행 전 venv 활성화** (안 하면 시스템 python이라 `No module named 'minutes'`):
+>   ```bash
+>   source .venv/Scripts/activate     # Windows Git-Bash   (Linux·mac: source .venv/bin/activate)
+>   ```
+>   활성화하면 프롬프트에 `(.venv)` 표시되고, 이후 아래 예시의 `python` 이 그대로 동작한다.
+>   (활성화 대신 매번 `.venv/Scripts/python -m ...` 로 명시해도 됨. 새 터미널마다 다시 활성화)
+> - Git Bash는 경로에 **슬래시 `/`**. `[transcribe]` = torch/faster-whisper/pyannote(무거움, **파일 전사**용).
+>   Vexa 봇 경로만이면 `[dev]`로 충분. 파일 전사엔 **ffmpeg** 필요(`winget install Gyan.FFmpeg`/`apt install ffmpeg`).
 
 ## 2. 설정 (`.env`)
 
