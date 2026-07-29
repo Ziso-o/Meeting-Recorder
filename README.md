@@ -39,7 +39,31 @@
 
 ---
 
-# 0. 원커맨드 로컬 실행 (권장 — `uv` 없어도 됨)
+# 0. 시작하기 (Git Bash)
+
+## 0-1. 코드 받기 — clone(최초) / pull(업데이트)
+
+Windows는 **Git Bash(MINGW64)** 기준. 브랜치: `claude/meeting-minutes-automation-07augh`.
+
+```bash
+# ── 최초 1회: 클론 ──
+cd ~
+git clone -b claude/meeting-minutes-automation-07augh https://github.com/Ziso-o/Meeting-Recorder.git
+cd Meeting-Recorder
+
+# ── 이후: 최신화(pull) ──
+cd ~/Meeting-Recorder
+git pull origin claude/meeting-minutes-automation-07augh
+```
+
+> - 명령·경로는 **슬래시 `/`** 로 쓴다(Git Bash). venv 파이썬은 `.venv/Scripts/python`(Windows).
+> - **집 GPU PC 최초 셋업**은 clone 후 한 줄이면 된다:
+>   ```bash
+>   bash scripts/home_pc_setup.sh   # venv·설치·ollama·.env·pytest 자동
+>   ```
+> - 다른 PC에 로컬 `.env`(untracked)가 이미 있어 pull이 거부되면: `mv .env .env.bak` 후 다시 pull.
+
+## 0-2. 원커맨드 로컬 실행 (권장 — `uv` 없어도 됨)
 
 `scripts/run_local.sh`(Linux/macOS/**Windows Git-Bash**) 또는 `scripts/run_local.ps1`(PowerShell)이
 가상환경 생성 → 의존성 설치(`uv` 없으면 `python -m venv`로 폴백) → `.env` 준비 → 실행까지 처리한다.
