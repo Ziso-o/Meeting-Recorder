@@ -1,7 +1,7 @@
 """minutes.server — HTTP 서비스 + 웹 대시보드.
 
 n8n 등 오케스트레이터가 HTTP Request로 호출하고, 사람이 브라우저로 쓸 수 있는
-간단한 대시보드(왼쪽 네비: 참석 / 상태 / 녹취파일 / 회의록)를 제공한다.
+대시보드(왼쪽 네비: 참석 / 상태 / 녹취파일 / 회의록)를 제공한다.
 표준 라이브러리만 사용(추가 의존성 없음).
 
 실행:
@@ -35,6 +35,8 @@ from .config import load_dotenv, provider_for_profile
 from .glossary import load_glossary
 from .render import render_markdown
 from .vexa import parse_meeting_url, select_vexa_client, vexa_to_segments
+
+from ._webui import INDEX_HTML
 
 
 def _data_dir() -> Path:
@@ -194,88 +196,6 @@ ROUTES: dict[tuple[str, str], Callable[[dict], dict]] = {
     ("POST", "/ingest"): ep_ingest,
     ("POST", "/pipeline"): ep_pipeline,
 }
-
-
-INDEX_HTML = """<!doctype html><html lang="ko"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>회의록 봇 대시보드</title>
-<style>
- *{box-sizing:border-box} body{margin:0;font-family:system-ui,'Segoe UI',sans-serif;color:#1f2937;background:#f8fafc}
- .app{display:flex;min-height:100vh}
- nav{width:200px;background:#111827;color:#e5e7eb;padding:16px 0;flex-shrink:0}
- nav h1{font-size:15px;padding:0 16px 12px;margin:0;border-bottom:1px solid #374151;color:#fff}
- nav a{display:block;padding:11px 16px;color:#cbd5e1;text-decoration:none;cursor:pointer;font-size:14px}
- nav a:hover{background:#1f2937} nav a.on{background:#2563eb;color:#fff}
- main{flex:1;padding:24px;max-width:900px}
- h2{font-size:18px;margin:0 0 16px} .view{display:none} .view.on{display:block}
- input,select,button,textarea{font-size:14px;padding:9px;border:1px solid #d1d5db;border-radius:6px}
- input,textarea{width:100%} button{background:#2563eb;color:#fff;border:0;cursor:pointer;padding:9px 16px}
- button.g{background:#e5e7eb;color:#111827} .row{display:flex;gap:8px;margin:8px 0;flex-wrap:wrap}
- pre{background:#fff;border:1px solid #e5e7eb;padding:14px;border-radius:8px;white-space:pre-wrap;word-break:break-all;font-size:13px}
- table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden}
- th,td{text-align:left;padding:9px 12px;border-bottom:1px solid #f1f5f9;font-size:13px}
- th{background:#f8fafc} tr:hover td{background:#f8fafc} .lnk{color:#2563eb;cursor:pointer}
- .badge{font-size:11px;padding:2px 7px;border-radius:99px;background:#e0e7ff;color:#3730a3}
- .muted{color:#6b7280;font-size:12px}
-</style></head><body><div class="app">
-<nav>
- <h1>🤖 회의록 봇</h1>
- <a data-v="join" class="on" onclick="go('join')">▶ 회의 참석</a>
- <a data-v="status" onclick="go('status')">📡 상태 모니터링</a>
- <a data-v="transcript" onclick="go('transcript')">🎙 녹취파일</a>
- <a data-v="minutes" onclick="go('minutes')">📄 회의록</a>
-</nav>
-<main>
- <section id="join" class="view on">
-  <h2>회의 참석</h2>
-  <p class="muted">회의 링크를 붙여넣으면 봇이 참석합니다 (Meet/Zoom/Teams/Jitsi).</p>
-  <div class="row"><input id="url" placeholder="https://meet.google.com/abc-defg-hij">
-   <button onclick="call('/bot/dispatch',{url:val('url')})">봇 참석</button></div>
-  <h2 style="margin-top:28px">회의록 생성 (회의 종료 후)</h2>
-  <div class="row"><input id="mid" placeholder="회의 ID (예: abc-defg-hij)" style="flex:1">
-   <select id="profile"><option value="secure">secure(로컬)</option><option value="internal">internal</option></select>
-   <button onclick="call('/ingest',{meeting:val('mid'),profile:val('profile')})">회의록 생성</button>
-   <button class="g" onclick="call('/bot/stop',{meeting:val('mid')})">봇 종료</button></div>
-  <h2 style="margin-top:20px">결과</h2><pre id="out">대기 중…</pre>
- </section>
-
- <section id="status" class="view">
-  <h2>상태 모니터링 <button class="g" onclick="loadStatus()">새로고침</button></h2>
-  <p class="muted">Vexa 봇 상태(GET /api/status). Vexa 미기동이면 error가 표시됩니다.</p>
-  <pre id="statusOut">새로고침을 누르세요.</pre>
- </section>
-
- <section id="transcript" class="view">
-  <h2>녹취파일 <button class="g" onclick="loadFiles('transcript')">새로고침</button></h2>
-  <div id="transcriptList"></div><pre id="transcriptView" class="muted">파일을 선택하세요.</pre>
- </section>
-
- <section id="minutes" class="view">
-  <h2>회의록 <button class="g" onclick="loadFiles('minutes')">새로고침</button></h2>
-  <div id="minutesList"></div><pre id="minutesView" class="muted">파일을 선택하세요.</pre>
- </section>
-</main></div>
-<script>
- const val=id=>document.getElementById(id).value.trim();
- function go(v){document.querySelectorAll('.view').forEach(s=>s.classList.toggle('on',s.id===v));
-   document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
-   if(v==='status')loadStatus(); if(v==='transcript')loadFiles('transcript'); if(v==='minutes')loadFiles('minutes');}
- async function call(path,body){const o=document.getElementById('out');o.textContent='요청 중…';
-   try{const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-     o.textContent=JSON.stringify(await r.json(),null,2);}catch(e){o.textContent='오류: '+e}}
- async function loadStatus(){const o=document.getElementById('statusOut');o.textContent='조회 중…';
-   try{const r=await fetch('/api/status');o.textContent=JSON.stringify(await r.json(),null,2);}catch(e){o.textContent='오류: '+e}}
- async function loadFiles(kind){const box=document.getElementById(kind+'List');box.innerHTML='조회 중…';
-   try{const r=await fetch('/api/files');const d=await r.json();
-     const rows=(d.files||[]).filter(f=>f.kind===kind);
-     if(!rows.length){box.innerHTML='<p class="muted">파일이 없습니다. (data/out 확인)</p>';return;}
-     box.innerHTML='<table><tr><th>파일</th><th>수정</th><th>크기</th></tr>'+rows.map(f=>
-       `<tr><td><span class="lnk" onclick="viewFile('${kind}','${f.path}')">${f.name}</span></td>
-        <td class="muted">${new Date(f.mtime*1000).toLocaleString()}</td><td class="muted">${f.size}B</td></tr>`).join('')+'</table>';
-   }catch(e){box.innerHTML='오류: '+e}}
- async function viewFile(kind,path){const v=document.getElementById(kind+'View');v.textContent='불러오는 중…';v.className='';
-   try{const r=await fetch('/api/file?path='+encodeURIComponent(path));const d=await r.json();
-     v.textContent=d.content!==undefined?d.content:JSON.stringify(d,null,2);}catch(e){v.textContent='오류: '+e}}
-</script></body></html>"""
 
 
 class Handler(BaseHTTPRequestHandler):
