@@ -33,9 +33,9 @@ outputs/
 *.minutes.json
 *.minutes.md
 
-# 백업 / Vexa 로컬 클론
+# 백업 / Vexa 로컬 클론(최상위 폴더만 — src/minutes/vexa 는 소스라 무시하면 안 됨)
 *.bak
-vexa/
+/vexa/
 
 # IDE / OS
 .vscode/
