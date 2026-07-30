@@ -5,6 +5,7 @@
  - UX 라이팅: 해요체 · 능동형 · 긍정형 문장(빈 상태도 "쌓여요"처럼 앞을 보게).
  - 다크·라이트 모드 모두 대응(prefers-color-scheme), 브랜드 컬러 #3182F6.
  - 장식 최소화, 정확한 상태 표현(오류가 아닌 곳에 경고 아이콘 안 씀).
+ - 흉내(mock)↔실제 모드 토글: 사이드바 스위치가 POST /mode 로 전환(프로세스 한정).
 회의록은 마크다운, 녹취는 화자 말풍선으로 렌더한다.
 """
 
@@ -18,7 +19,7 @@ INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
   --fill:#f4f6f8; --fill-2:#eef1f4; --fill-2h:#e5e9ee; --input:#fbfcfd;
   --pri:#3182f6; --pri-d:#1b64da; --pri-soft:#e8f3ff; --pri-line:#cfe1ff; --pri-tint:#f6fbff;
   --ok:#12b886; --ok-soft:#e9fbf3; --danger:#f04452; --danger-soft:#fff5f5; --danger-line:#ffd6d9;
-  --warn:#d9860b; --warn-soft:#fff4e2; --warn-line:#ffe0ad;
+  --warn:#d9860b; --warn-soft:#fff4e2; --warn-line:#ffe0ad; --track:#ccd1d8;
   --gray-t:#4e5968; --toast-bg:#191f28; --toast-t:#fff; --skel1:#eef1f4; --skel2:#f7f9fb;
   --r:18px; --sh:0 1px 2px rgba(0,0,0,.04),0 6px 20px rgba(0,0,0,.05);
  }
@@ -27,7 +28,7 @@ INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
   --fill:#26282e; --fill-2:#2b2e35; --fill-2h:#343841; --input:#25272c;
   --pri:#4d94ff; --pri-d:#3f88f5; --pri-soft:#1b2b45; --pri-line:#33507e; --pri-tint:#1b222e;
   --ok:#2fce9b; --ok-soft:#173a30; --danger:#ff6b74; --danger-soft:#381e21; --danger-line:#5a2b30;
-  --warn:#f5a623; --warn-soft:#3a2e14; --warn-line:#5c4820;
+  --warn:#f5a623; --warn-soft:#3a2e14; --warn-line:#5c4820; --track:#41454d;
   --gray-t:#c4ccd4; --toast-bg:#f1f3f5; --toast-t:#191f28; --skel1:#26282e; --skel2:#2e3137;
   --sh:0 1px 2px rgba(0,0,0,.3),0 6px 22px rgba(0,0,0,.38);
  }}
@@ -41,7 +42,17 @@ INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;padding:6px 10px 18px}
  .brand .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#3182f6,#1b64da);
   display:grid;place-items:center;color:#fff;font-size:16px}
- .modebadge{display:none;margin:0 6px 14px;padding:9px 11px;border-radius:11px;font-size:12px;font-weight:700;
+ .moderow{display:flex;align-items:center;justify-content:space-between;margin:2px 8px 10px;
+  padding:9px 11px;border-radius:11px;background:var(--fill);font-size:13px;font-weight:700;color:var(--text)}
+ .moderow .sub{font-size:11px;font-weight:500;color:var(--sub)}
+ .sw{position:relative;display:inline-block;width:40px;height:23px;flex-shrink:0}
+ .sw input{opacity:0;width:0;height:0}
+ .sw .sl{position:absolute;inset:0;background:var(--track);border-radius:99px;transition:.2s;cursor:pointer}
+ .sw .sl::before{content:"";position:absolute;height:17px;width:17px;left:3px;top:3px;background:#fff;
+  border-radius:50%;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+ .sw input:checked+.sl{background:var(--warn)}
+ .sw input:checked+.sl::before{transform:translateX(17px)}
+ .modebadge{display:none;margin:0 8px 14px;padding:9px 11px;border-radius:11px;font-size:12px;font-weight:700;
   background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-line);line-height:1.4;cursor:help}
  .modebadge.on{display:block}
  .nav{display:flex;flex-direction:column;gap:4px}
@@ -133,6 +144,10 @@ INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
 <div class="layout">
  <aside class="side">
   <div class="brand"><span class="logo">🤖</span><span>회의록 봇</span></div>
+  <div class="moderow" title="이 서버가 켜져 있는 동안에만 적용돼요 (.env 파일은 그대로).">
+   <div>흉내 모드<div class="sub">켜면 실제로 동작 안 함</div></div>
+   <label class="sw"><input type="checkbox" id="mockSw" onchange="setMode(this.checked)"><span class="sl"></span></label>
+  </div>
   <div class="modebadge" id="modeBadge"></div>
   <div class="nav">
    <button class="on" data-v="join" onclick="go('join')"><span class="ic">▶</span>회의 참석</button>
@@ -307,12 +322,16 @@ function renderTranscript(txt){let d;try{d=JSON.parse(txt);}catch(e){return '<pr
 /* 부트스트랩 */
 let MOCK={};
 const MOCK_LABEL={vexa:'봇 참석',llm:'회의록 작성',asr:'전사',diarizer:'화자분리'};
-function applyMock(m){MOCK=m||{};const b=$('modeBadge');
+function applyMock(m){MOCK=m||{};const b=$('modeBadge');const sw=$('mockSw');if(sw)sw.checked=!!(m&&m.any);
  if(m&&m.any){const parts=Object.keys(MOCK_LABEL).filter(k=>m[k]).map(k=>MOCK_LABEL[k]);
   b.className='modebadge on';
   b.innerHTML='🧪 흉내 모드(mock)<br><span style="font-weight:500;font-size:11px">'+parts.join(' · ')+' — 실제 동작 안 함</span>';
   b.title='흉내(mock) 대상: '+parts.join(', ')+'\n실제로 회의에 참석하거나 전사·회의록을 만들지 않고, 예시 응답만 줘요.\n실전은 .env 의 *_=mock 을 지우고 Vexa/모델을 켜세요.';}
  else b.className='modebadge';}
+async function setMode(on){let r;try{r=await jpost('/mode',{mock:on});}catch(e){return toast('모드를 바꾸지 못했어요','err');}
+ applyMock(r.mock);
+ if(on)toast('흉내 모드로 바꿨어요 — 실제로 동작하지 않아요','warn');
+ else toast('실제 모드로 바꿨어요 — Vexa·모델이 켜져 있어야 동작해요','ok');}
 async function svcCheck(){try{const h=await jget('/health');$('svcDot').className='dot ok';$('svcTxt').textContent='서비스 온라인';applyMock(h.mock);}
  catch(e){$('svcDot').className='dot bad';$('svcTxt').textContent='서비스 오프라인';}}
 async function refreshBadges(){try{const d=await jget('/api/files');const f=d.files||[];

@@ -28,6 +28,36 @@ def test_dashboard_has_mock_badge():
     assert "modeBadge" in server.INDEX_HTML and "흉내 모드" in server.INDEX_HTML
 
 
+def test_dashboard_has_mode_switch():
+    assert "mockSw" in server.INDEX_HTML and "/mode" in server.INDEX_HTML
+
+
+def test_ep_mode_toggle_restores_baseline(monkeypatch):
+    monkeypatch.delenv("VEXA_CLIENT", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("ASR_ENGINE", "faster-whisper")  # 실제 값은 보존돼야
+    server._baseline = None
+    server._capture_baseline()
+
+    assert server.ep_mode({"mock": True})["mock"]["any"] is True
+    import os
+
+    assert os.environ["VEXA_CLIENT"] == "mock"
+
+    res = server.ep_mode({"mock": False})
+    assert res["mock"]["any"] is False
+    assert "VEXA_CLIENT" not in os.environ          # mock 값은 제거
+    assert os.environ["ASR_ENGINE"] == "faster-whisper"  # 실제 값은 복원
+    server._baseline = None
+
+
+def test_ep_mode_requires_flag():
+    import pytest
+
+    with pytest.raises(KeyError):
+        server.ep_mode({})
+
+
 def test_ep_ingest_mock(tmp_path, monkeypatch):
     monkeypatch.setenv("VEXA_CLIENT", "mock")
     monkeypatch.setenv("LLM_PROVIDER", "mock")

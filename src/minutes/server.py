@@ -15,6 +15,7 @@ n8n 등 오케스트레이터가 HTTP Request로 호출하고, 사람이 브라�
     GET  /api/status       Vexa 봇 상태
     GET  /api/files        data/ 아래 전사·회의록 파일 목록
     GET  /api/file?path=   파일 내용(data/ 내부만)
+    POST /mode             {mock: true|false}  흉내↔실제 전환(프로세스 한정, .env 불변)
     POST /bot/dispatch     {url} 또는 {platform?, meeting|meetingId}
     POST /bot/stop         {platform?, meeting|meetingId}
     POST /ingest           {platform?, meeting|meetingId, profile?, out?, title?, date?, glossary?}
@@ -43,14 +44,24 @@ def _data_dir() -> Path:
     return Path(os.environ.get("MINUTES_HOME", ".")) / "data"
 
 
+_MOCK_KEYS = ("VEXA_CLIENT", "LLM_PROVIDER", "ASR_ENGINE", "DIARIZER")
+_baseline: dict[str, str | None] | None = None  # 서버 시작 시점(.env 반영)의 원래 값
+
+
 def _mock_flags() -> dict:
     """어떤 하위 시스템이 흉내(mock) 모드인지 — 대시보드가 배지로 알려주기 위함."""
     def m(k: str) -> bool:
         return os.environ.get(k, "").lower() == "mock"
 
-    v, llm, asr, dia = m("VEXA_CLIENT"), m("LLM_PROVIDER"), m("ASR_ENGINE"), m("DIARIZER")
+    v, llm, asr, dia = (m(k) for k in _MOCK_KEYS)
     return {"vexa": v, "llm": llm, "asr": asr, "diarizer": dia,
             "any": v or llm or asr or dia}
+
+
+def _capture_baseline() -> None:
+    global _baseline
+    if _baseline is None:
+        _baseline = {k: os.environ.get(k) for k in _MOCK_KEYS}
 
 
 def _meeting(body: dict) -> str:
@@ -144,6 +155,27 @@ def ep_file(p: dict) -> dict:
             "content": target.read_text(encoding="utf-8", errors="replace")}
 
 
+def ep_mode(body: dict) -> dict:
+    """흉내(mock) ↔ 실제 모드 전환. 이 서버 프로세스가 켜져 있는 동안에만 적용된다.
+    (.env 파일은 건드리지 않음 — 재시작하면 .env 값으로 돌아감.)
+    """
+    _capture_baseline()
+    want = body.get("mock")
+    if want is None:
+        raise KeyError("mock")
+    assert _baseline is not None
+    for k in _MOCK_KEYS:
+        if want:
+            os.environ[k] = "mock"
+        else:  # 실제: 원래 값이 mock이 아니면 복원, mock이었으면 제거(=실제 기본값)
+            base = _baseline.get(k)
+            if base and base.lower() != "mock":
+                os.environ[k] = base
+            else:
+                os.environ.pop(k, None)
+    return {"ok": True, "mock": _mock_flags()}
+
+
 def ep_bot_dispatch(body: dict) -> dict:
     passcode = body.get("passcode", "")
     if body.get("url"):
@@ -201,6 +233,7 @@ ROUTES: dict[tuple[str, str], Callable[[dict], dict]] = {
     ("GET", "/api/status"): ep_status,
     ("GET", "/api/files"): ep_files,
     ("GET", "/api/file"): ep_file,
+    ("POST", "/mode"): ep_mode,
     ("POST", "/bot/dispatch"): ep_bot_dispatch,
     ("POST", "/bot/stop"): ep_bot_stop,
     ("POST", "/ingest"): ep_ingest,
@@ -259,6 +292,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main(argv: list[str] | None = None) -> int:
     load_dotenv()
+    _capture_baseline()  # .env 반영된 원래 값을 기억(웹 모드전환의 '실제' 기준)
     host = os.environ.get("MINUTES_SERVER_HOST", "127.0.0.1")
     port = int(os.environ.get("MINUTES_SERVER_PORT", "8900"))
     httpd = ThreadingHTTPServer((host, port), Handler)
