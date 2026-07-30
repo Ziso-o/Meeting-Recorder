@@ -72,21 +72,15 @@ cp .env.example .env      # 아래 [필수] 키만 채우면 됨 (나머지는 �
 # ── 코드 받기(최신화) ───────────────────────────────────────
 git pull origin claude/meeting-minutes-automation-07augh
 
-# ── 구동 ① 웹 대시보드 (권장) ───────────────────────────────
-#   브라우저에서 참석·상태·녹취·회의록 + 흉내↔실제 토글까지 한 화면
+# ── 구동: 웹 대시보드 ───────────────────────────────────────
+#   이후 참석·상태·녹취·회의록 + 흉내↔실제 전환까지 전부 브라우저에서 입력·실행
 .venv/Scripts/python -m minutes.server        # → http://127.0.0.1:8900/   (Linux·mac: .venv/bin/python)
-
-# ── 구동 ② CLI (대시보드 없이 단독 실행) ────────────────────
-#   profile: secure=로컬 Ollama(외부유출0) / internal=Gemini
-python -m minutes.pipeline    --audio meeting.m4a --profile secure          # 오디오 → 회의록 한 번에
-python -m minutes.bot request --url "https://meet.google.com/abc-defg-hij"  # Vexa 봇 참석(링크만)
-python -m minutes.bot ingest  --meeting abc-defg-hij --profile secure       # 회의 종료 → 전사·회의록
-python -m minutes.watch       --profile secure                              # 폴더 감시 무인(data/incoming→out)
 ```
 
-> - `python` = venv 파이썬. **활성화** 안 하면(`source .venv/Scripts/activate`) 시스템 python이라 `No module named 'minutes'` — 활성화하거나 매번 `.venv/Scripts/python -m ...` 로 명시.
-> - **오프라인/무키 확인**: 명령 앞에 `VEXA_CLIENT=mock LLM_PROVIDER=mock` (대시보드는 좌측 스위치로 전환).
+> - venv 활성화(`source .venv/Scripts/activate`) 안 하면 시스템 python이라 `No module named 'minutes'` — 위처럼 `.venv/Scripts/python` 로 명시하거나 활성화 후 `python` 사용.
+> - 흉내↔실제 전환은 대시보드 **좌측 스위치**로. (실제 모드는 `.env`에 Vexa 주소·키 필요)
 > - 종료는 `Ctrl+C`. 외부(다른 PC/폰) 접속은 `MINUTES_SERVER_HOST=0.0.0.0` (신뢰 네트워크·B2G 정책 확인 후).
+> - 스크립트 자동화가 필요하면 CLI(`minutes.pipeline` · `bot` · `watch`)도 그대로 있음.
 
 **웹 대시보드 4개 뷰**
 
