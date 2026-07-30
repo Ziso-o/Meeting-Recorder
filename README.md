@@ -13,6 +13,7 @@
 | 봇 참석 | **Vexa 셀프호스팅** (게이트웨이 :18056, Cloud 발급 불필요) |
 | 전사·화자분리 | 실시간 = Vexa 내장 / 파일 = faster-whisper large-v3 + pyannote 3.1 |
 | LLM 회의록 | **Ollama**(로컬, 필수) / Gemini(선택, internal) |
+| 웹 대시보드 | **`minutes.server`** — 링크 붙여넣기로 봇 참석·상태·녹취·회의록 (추가 의존성 0) |
 | 오케스트레이션 | **n8n** — HTTP Request로 `minutes.server` 호출 (n8n 버전 무관) |
 | 런타임 | Python 3.11 / uv |
 
@@ -23,7 +24,7 @@
 
 ## 진행 상태
 
-Phase 1–4 코드 + **n8n HTTP 오케스트레이션 mock e2e 검증 완료** (pytest 51개).
+Phase 1–4 코드 + **웹 대시보드** + **n8n HTTP 오케스트레이션 mock e2e 검증 완료** (pytest 57개).
 🔜 집 GPU PC에서 실제 Vexa 봇 참가로 전환 → 이후 Vultr 이관.
 
 ---
@@ -43,7 +44,7 @@ bash scripts/run_local.sh --setup-only  # 또는 원커맨드 셋업(uv 없어�
 # ── 수동 설치 ──
 uv venv && uv pip install -e ".[transcribe]"     # uv 없으면: python -m venv .venv && \
 #   .venv/Scripts/python -m pip install -e ".[transcribe]"   # (Windows / Linux는 .venv/bin/python)
-.venv/Scripts/python -m pytest -q                # 51 passed 확인
+.venv/Scripts/python -m pytest -q                # 57 passed 확인
 ```
 
 > - **⚠️ 실행 전 venv 활성화** (안 하면 시스템 python이라 `No module named 'minutes'`):
@@ -96,8 +97,8 @@ python -m minutes.bot request  --url "https://meet.google.com/abc-defg-hij"   # 
 python -m minutes.bot ingest   --platform google_meet --meeting abc-defg-hij --profile secure --out mtg  # 전사→회의록
 python -m minutes.bot stop     --platform google_meet --meeting abc-defg-hij  # 봇 종료
 
-# ── n8n용 HTTP 서비스 (켜두면 n8n이 호출) ────────────────────────────
-python -m minutes.server        # 127.0.0.1:8900  (GET /health, POST /bot/dispatch|/ingest|/pipeline …)
+# ── 웹 대시보드 + n8n용 HTTP 서비스 (켜두면 브라우저·n8n이 호출) ──────
+python -m minutes.server        # 127.0.0.1:8900  → 브라우저로 접속하면 대시보드(4절)
 
 # ── 품질 측정 ────────────────────────────────────────────────────────
 python scripts/cer.py --ref reference.txt --hyp meeting.transcript.json           # 전사 CER
@@ -106,7 +107,29 @@ python scripts/ab_transcribe.py --vexa v.json --ours meeting.transcript.json    
 
 ---
 
-## 4. n8n 자동화 (HTTP 방식 — ✅ 검증된 정본)
+## 4. 웹 대시보드 (CLI 없이 브라우저로)
+
+CLI가 불편하면 `minutes.server`를 켜고 브라우저로 열면 된다. **추가 의존성 없이**
+표준 라이브러리 HTTP 서비스가 토스풍 대시보드(좌측 네비 + 4개 뷰)를 그대로 서빙한다.
+
+```bash
+python -m minutes.server                          # http://127.0.0.1:8900/
+VEXA_CLIENT=mock LLM_PROVIDER=mock python -m minutes.server   # 키·봇 없이 UI만 둘러보기
+```
+
+| 좌측 네비 | 하는 일 |
+|---|---|
+| **▶ 회의 참석** | 회의 **링크 붙여넣기 → 참가** (Meet/Zoom/Teams/Jitsi 자동 인식). 봇 종료·전사수집도 |
+| **📡 상태 모니터링** | 서비스 / Vexa 연결 / 실행 중 봇 카드 + 원본 응답. 자동 새로고침(5초) |
+| **🎙 녹취파일** | `data/` 전사 목록 → 클릭 시 **화자별 말풍선**으로 렌더 |
+| **📄 회의록** | 생성된 회의록을 **마크다운 렌더**(제목/결정/액션아이템 표/근거) |
+
+> 외부(다른 PC/폰)에서 접속하려면 `MINUTES_SERVER_HOST=0.0.0.0` (신뢰 네트워크·B2G 보안정책 확인 후).
+> 대시보드가 호출하는 REST는 아래 n8n과 동일한 엔드포인트다(같은 서비스).
+
+---
+
+## 5. n8n 자동화 (HTTP 방식 — ✅ 검증된 정본)
 
 n8n 최신 버전은 Execute Command 노드를 미지원(2.8.4 확인) → **HTTP 서비스**를 띄우고
 n8n은 **HTTP Request 노드**로 호출한다. (Docker·네이티브·클라우드 공용)
@@ -127,7 +150,7 @@ curl -X POST http://localhost:5678/webhook/meeting-end  -H "Content-Type: applic
 > 서비스 단독 테스트: `curl -X POST http://127.0.0.1:8900/ingest -H "Content-Type: application/json" -d '{"meetingId":"testid","profile":"secure"}'`
 > 참고: Docker+Execute Command 방식(`workflows/vexa_meeting.json`, `docker-compose.yml`)은 보존만 — 정본은 HTTP.
 
-## 5. Vexa 봇 셀프호스팅 (외부 API 발급 불필요)
+## 6. Vexa 봇 셀프호스팅 (외부 API 발급 불필요)
 
 `make all`이 로컬에서 API 키(`vxa_...`)를 자동 생성한다. Vexa Cloud 계정/토큰 불필요.
 
@@ -142,10 +165,10 @@ make bot      # 회의 봇
 
 ---
 
-## 6. 개발 / 구조 / 문서
+## 7. 개발 / 구조 / 문서
 
 ```bash
-python -m pytest -q                     # 51개 (mock으로 네트워크·GPU·오디오 없이 e2e)
+python -m pytest -q                     # 57개 (mock으로 네트워크·GPU·오디오 없이 e2e)
 python -m ruff check src tests scripts  # 린트
 ```
 > `prompts/*.md`와 `glossary.yaml`은 **실제 회의 결과를 보며 사람이 직접 튜닝**한다 — 이게 진짜 IP.
@@ -157,7 +180,7 @@ src/minutes/
 ├── transcribe.py · asr/                # Phase 2 전사(audio·whisper·groq·diarize·merge)
 ├── pipeline.py · watch.py              # Phase 3 결합 + 폴더 무인
 ├── bot.py · vexa/                       # Phase 4 봇(client·convert·meeting_url·mock)
-├── server.py                            # n8n용 HTTP 서비스
+├── server.py · _webui.py                # HTTP 서비스 + 웹 대시보드(토스풍 UI)
 └── config.py · glossary.py             # 설정·용어집
 prompts/ · glossary.yaml · scripts/ · workflows/ · docs/ · docker/
 ```
