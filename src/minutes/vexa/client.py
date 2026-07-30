@@ -16,6 +16,19 @@ from __future__ import annotations
 from typing import Any
 
 
+def _check(r) -> None:
+    """비정상 응답이면 Vexa가 준 본문(검증 상세)까지 담아 예외를 던진다.
+
+    422 등에서 '어느 필드가 왜 틀렸는지'를 대시보드/CLI에 그대로 드러내기 위함.
+    """
+    if r.status_code >= 400:
+        try:
+            detail = r.json()
+        except Exception:
+            detail = (r.text or "")[:500]
+        raise RuntimeError(f"Vexa {r.status_code} {r.request.method} {r.request.url.path}: {detail}")
+
+
 class VexaClient:
     def __init__(
         self,
@@ -61,25 +74,25 @@ class VexaClient:
             body["passcode"] = passcode  # Zoom 등. Vexa 버전에 따라 필드명 다를 수 있음
         with self._client() as c:
             r = c.post("/bots", json=body)
-            r.raise_for_status()
+            _check(r)
             return r.json()
 
     def get_transcript(self, platform: str, native_meeting_id: str) -> dict[str, Any]:
         """Vexa 내장 전사를 조회한다."""
         with self._client() as c:
             r = c.get(f"/transcripts/{platform}/{native_meeting_id}")
-            r.raise_for_status()
+            _check(r)
             return r.json()
 
     def stop_bot(self, platform: str, native_meeting_id: str) -> dict[str, Any]:
         """봇을 회의에서 내보낸다."""
         with self._client() as c:
             r = c.delete(f"/bots/{platform}/{native_meeting_id}")
-            r.raise_for_status()
+            _check(r)
             return r.json() if r.content else {"status": "stopped"}
 
     def bot_status(self) -> dict[str, Any]:
         with self._client() as c:
             r = c.get("/bots/status")
-            r.raise_for_status()
+            _check(r)
             return r.json()
