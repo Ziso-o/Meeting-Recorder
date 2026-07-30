@@ -178,7 +178,9 @@ def ep_mode(body: dict) -> dict:
 
 def ep_bot_dispatch(body: dict) -> dict:
     passcode = body.get("passcode", "")
+    meeting_url = ""
     if body.get("url"):
+        meeting_url = body["url"]  # zoom/jitsi는 전체 링크가 필요(패스워드도 링크에 포함)
         parsed = parse_meeting_url(body["url"])
         platform = parsed["platform"]
         meeting = parsed["native_meeting_id"]
@@ -187,7 +189,8 @@ def ep_bot_dispatch(body: dict) -> dict:
         platform = body.get("platform", "google_meet")
         meeting = _meeting(body)
     client = select_vexa_client()
-    return client.request_bot(platform, meeting, language=body.get("language", "ko"), passcode=passcode)
+    return client.request_bot(platform, meeting, language=body.get("language", "ko"),
+                              passcode=passcode, meeting_url=meeting_url)
 
 
 def ep_bot_stop(body: dict) -> dict:

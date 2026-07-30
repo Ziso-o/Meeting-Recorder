@@ -61,8 +61,13 @@ class VexaClient:
         language: str = "ko",
         task: str = "transcribe",
         passcode: str = "",
+        meeting_url: str = "",
     ) -> dict[str, Any]:
-        """봇을 회의에 참석시킨다."""
+        """봇을 회의에 참석시킨다.
+
+        zoom/jitsi는 회의 ID만으론 안 되고 전체 링크(meeting_url)를 요구한다
+        (링크의 ?pwd= 로 패스워드도 함께 처리). meet/teams는 native_meeting_id로 충분.
+        """
         body = {
             "platform": platform,
             "native_meeting_id": native_meeting_id,
@@ -70,8 +75,10 @@ class VexaClient:
             "language": language,
             "task": task,
         }
+        if meeting_url:
+            body["meeting_url"] = meeting_url  # zoom/jitsi 필수 (패스워드 포함 링크)
         if passcode:
-            body["passcode"] = passcode  # Zoom 등. Vexa 버전에 따라 필드명 다를 수 있음
+            body["passcode"] = passcode  # 별도 패스워드 필드가 필요한 버전 대비
         with self._client() as c:
             r = c.post("/bots", json=body)
             _check(r)

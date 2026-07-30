@@ -56,3 +56,26 @@ def test_dispatch_by_url_mock(monkeypatch):
     assert res["status"] == "requested"
     assert res["platform"] == "google_meet"
     assert res["native_meeting_id"] == "abc-defg-hij"
+
+
+def test_dispatch_zoom_forwards_meeting_url(monkeypatch):
+    """zoom/jitsi는 전체 링크(meeting_url)를 그대로 넘겨야 한다(패스워드 포함)."""
+    captured: dict = {}
+
+    class Fake:
+        bot_name = "회의록봇"
+
+        def request_bot(self, platform, native_meeting_id, language="ko",
+                        passcode="", meeting_url=""):
+            captured.update(platform=platform, meeting=native_meeting_id,
+                            passcode=passcode, meeting_url=meeting_url)
+            return {"status": "requested", "platform": platform,
+                    "native_meeting_id": native_meeting_id}
+
+    monkeypatch.setattr(server, "select_vexa_client", lambda: Fake())
+    url = "https://us05web.zoom.us/j/86332083798?pwd=SeCret.1"
+    res = server.ep_bot_dispatch({"url": url})
+    assert res["status"] == "requested"
+    assert captured["platform"] == "zoom"
+    assert captured["meeting_url"] == url          # 전체 링크 전달
+    assert captured["passcode"] == "SeCret.1"      # 링크의 pwd 파싱

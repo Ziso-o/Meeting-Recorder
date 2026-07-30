@@ -13,7 +13,7 @@ class MockVexaClient:
 
     def request_bot(
         self, platform: str, native_meeting_id: str, language: str = "ko",
-        task: str = "transcribe", passcode: str = "",
+        task: str = "transcribe", passcode: str = "", meeting_url: str = "",
     ) -> dict[str, Any]:
         self.dispatched.append((platform, native_meeting_id))
         return {

@@ -31,7 +31,9 @@ def _print(obj) -> None:
 def cmd_request(args) -> int:
     client = select_vexa_client()
     passcode = ""
+    meeting_url = ""
     if getattr(args, "url", ""):
+        meeting_url = args.url  # zoom/jitsi 필수(패스워드 포함 링크)
         parsed = parse_meeting_url(args.url)
         platform, meeting = parsed["platform"], parsed["native_meeting_id"]
         passcode = parsed.get("passcode", "")
@@ -41,7 +43,8 @@ def cmd_request(args) -> int:
             return 2
         platform, meeting = args.platform, args.meeting
     print(f"봇 참석 요청: name={client.bot_name}, {platform}/{meeting}")
-    _print(client.request_bot(platform, meeting, language=args.language, passcode=passcode))
+    _print(client.request_bot(platform, meeting, language=args.language,
+                              passcode=passcode, meeting_url=meeting_url))
     return 0
 
 
