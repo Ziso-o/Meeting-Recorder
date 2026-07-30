@@ -18,6 +18,7 @@ INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
   --fill:#f4f6f8; --fill-2:#eef1f4; --fill-2h:#e5e9ee; --input:#fbfcfd;
   --pri:#3182f6; --pri-d:#1b64da; --pri-soft:#e8f3ff; --pri-line:#cfe1ff; --pri-tint:#f6fbff;
   --ok:#12b886; --ok-soft:#e9fbf3; --danger:#f04452; --danger-soft:#fff5f5; --danger-line:#ffd6d9;
+  --warn:#d9860b; --warn-soft:#fff4e2; --warn-line:#ffe0ad;
   --gray-t:#4e5968; --toast-bg:#191f28; --toast-t:#fff; --skel1:#eef1f4; --skel2:#f7f9fb;
   --r:18px; --sh:0 1px 2px rgba(0,0,0,.04),0 6px 20px rgba(0,0,0,.05);
  }
@@ -26,6 +27,7 @@ INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
   --fill:#26282e; --fill-2:#2b2e35; --fill-2h:#343841; --input:#25272c;
   --pri:#4d94ff; --pri-d:#3f88f5; --pri-soft:#1b2b45; --pri-line:#33507e; --pri-tint:#1b222e;
   --ok:#2fce9b; --ok-soft:#173a30; --danger:#ff6b74; --danger-soft:#381e21; --danger-line:#5a2b30;
+  --warn:#f5a623; --warn-soft:#3a2e14; --warn-line:#5c4820;
   --gray-t:#c4ccd4; --toast-bg:#f1f3f5; --toast-t:#191f28; --skel1:#26282e; --skel2:#2e3137;
   --sh:0 1px 2px rgba(0,0,0,.3),0 6px 22px rgba(0,0,0,.38);
  }}
@@ -39,6 +41,9 @@ INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;padding:6px 10px 18px}
  .brand .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#3182f6,#1b64da);
   display:grid;place-items:center;color:#fff;font-size:16px}
+ .modebadge{display:none;margin:0 6px 14px;padding:9px 11px;border-radius:11px;font-size:12px;font-weight:700;
+  background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-line);line-height:1.4;cursor:help}
+ .modebadge.on{display:block}
  .nav{display:flex;flex-direction:column;gap:4px}
  .nav button{display:flex;align-items:center;gap:11px;width:100%;border:0;background:transparent;
   color:var(--sub);font:inherit;font-weight:600;font-size:14.5px;padding:12px 12px;border-radius:12px;
@@ -82,6 +87,7 @@ INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
  .chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;padding:5px 11px;
   border-radius:99px;background:var(--pri-soft);color:var(--pri)}
  .chip.g{background:var(--ok-soft);color:var(--ok)} .chip.r{background:var(--danger-soft);color:var(--danger)}
+ .chip.w{background:var(--warn-soft);color:var(--warn)}
  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
  .stat{background:var(--card);border-radius:16px;box-shadow:var(--sh);padding:20px}
  .stat .k{color:var(--sub);font-size:13px;margin-bottom:8px} .stat .v{font-size:26px;font-weight:800}
@@ -120,13 +126,14 @@ INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
  .toast{background:var(--toast-bg);color:var(--toast-t);padding:13px 18px;border-radius:13px;font-size:14px;font-weight:600;
   box-shadow:0 8px 30px rgba(0,0,0,.25);display:flex;align-items:center;gap:9px;animation:tin .28s cubic-bezier(.2,.8,.2,1)}
  .toast.out{animation:tout .3s forwards} .toast .td{width:8px;height:8px;border-radius:50%;background:var(--pri)}
- .toast.ok .td{background:var(--ok)} .toast.err .td{background:var(--danger)}
+ .toast.ok .td{background:var(--ok)} .toast.err .td{background:var(--danger)} .toast.warn .td{background:var(--warn)}
  @keyframes tin{from{opacity:0;transform:translateY(16px) scale(.96)}to{opacity:1;transform:none}}
  @keyframes tout{to{opacity:0;transform:translateY(10px)}}
 </style></head><body>
 <div class="layout">
  <aside class="side">
   <div class="brand"><span class="logo">🤖</span><span>회의록 봇</span></div>
+  <div class="modebadge" id="modeBadge"></div>
   <div class="nav">
    <button class="on" data-v="join" onclick="go('join')"><span class="ic">▶</span>회의 참석</button>
    <button data-v="status" onclick="go('status')"><span class="ic">📡</span>상태 모니터링</button>
@@ -214,8 +221,9 @@ async function joinBot(){const url=$('url').value.trim(); if(!url)return toast('
  busy('joinBtn',false,'참석시키기'); const res=$('joinRes');
  if(r.ok===false){res.className='result show err';res.innerHTML='<span class="chip r">실패</span>'+esc(r.error||'오류가 났어요');toast('참석하지 못했어요','err');return;}
  res.className='result show';res.innerHTML='<span class="chip g">참석 요청됨</span>'+
-  '<b>'+esc(r.platform||'')+'</b><span style="color:var(--sub)">·</span><code style="background:var(--pri-soft);padding:3px 8px;border-radius:7px">'+esc(r.native_meeting_id||'')+'</code>';
- toast('봇에게 참석을 요청했어요','ok');}
+  '<b>'+esc(r.platform||'')+'</b><span style="color:var(--sub)">·</span><code style="background:var(--pri-soft);padding:3px 8px;border-radius:7px">'+esc(r.native_meeting_id||'')+'</code>'+
+  (MOCK.vexa?'<span class="chip w" style="margin-left:auto">🧪 흉내 응답 · 실제 참석 아님</span>':'');
+ toast(MOCK.vexa?'흉내 모드예요 — 실제 참석은 아니에요':'봇에게 참석을 요청했어요',MOCK.vexa?'warn':'ok');}
 async function stopBot(){const m=$('mid').value.trim(); if(!m)return toast('회의 ID를 넣어 주세요','err');
  const r=await jpost('/bot/stop',{meeting:m}); toast(r.ok===false?('종료하지 못했어요: '+esc(r.error)):'봇을 종료했어요',r.ok===false?'err':'ok');}
 async function ingest(){const m=$('mid').value.trim(),p=$('profile').value; if(!m)return toast('회의 ID를 넣어 주세요','err');
@@ -223,8 +231,9 @@ async function ingest(){const m=$('mid').value.trim(),p=$('profile').value; if(!
  busy('ingBtn',false,'회의록 만들기'); const res=$('ingRes');
  if(r.ok===false){res.className='result show err';res.innerHTML='<span class="chip r">실패</span>'+esc(r.error||'오류가 났어요');toast('회의록을 만들지 못했어요','err');return;}
  res.className='result show';res.innerHTML='<span class="chip g">완료</span>세그먼트 '+r.segments+' · 결정 '+r.decisions+' · 액션 '+r.action_items+
+  ((MOCK.vexa||MOCK.llm)?'<span class="chip w">🧪 흉내</span>':'')+
   ' <button class="btn pri sm" style="margin-left:auto" onclick="go(\'minutes\')">회의록 보기</button>';
- toast('회의록을 만들었어요','ok'); refreshBadges();}
+ toast((MOCK.vexa||MOCK.llm)?'흉내 모드로 예시 회의록을 만들었어요':'회의록을 만들었어요',(MOCK.vexa||MOCK.llm)?'warn':'ok'); refreshBadges();}
 
 /* 상태 */
 let autoTimer=null;
@@ -232,12 +241,14 @@ function toggleAuto(){if($('auto').checked){autoTimer=setInterval(loadStatus,500
 async function loadStatus(){const g=$('statGrid');g.innerHTML='<div class="stat"><div class="skel" style="width:60%"></div><div class="skel" style="width:40%;height:24px"></div></div>'.repeat(3);
  let d; try{d=await jget('/api/status');}catch(e){g.innerHTML='<div class="stat"><div class="k">서비스</div><div class="v" style="color:var(--danger)">오프라인</div></div>';return;}
  const vx=d.vexa||{}; const err=vx.error; const bots=(vx.running_bots||vx.bots||[]);
+ const mk=d.mock||{};
  g.innerHTML=
+  card('모드',mk.any?'흉내(mock)':'실제',mk.any?'warn':'ok')+
   card('서비스','정상','ok')+
   card('Vexa 연결',err?'미연결':'정상',err?'bad':'ok')+
   card('실행 중 봇',String(Array.isArray(bots)?bots.length:0),'');
  $('statRaw').textContent=JSON.stringify(d,null,2);}
-function card(k,v,tone){const c=tone==='ok'?'var(--ok)':tone==='bad'?'var(--danger)':'var(--text)';
+function card(k,v,tone){const c=tone==='ok'?'var(--ok)':tone==='bad'?'var(--danger)':tone==='warn'?'var(--warn)':'var(--text)';
  return '<div class="stat"><div class="k">'+esc(k)+'</div><div class="v" style="color:'+c+'">'+esc(v)+'</div></div>';}
 
 /* 파일 목록/뷰어 */
@@ -294,7 +305,15 @@ function renderTranscript(txt){let d;try{d=JSON.parse(txt);}catch(e){return '<pr
    '<div class="btext">'+esc(s.text)+'</div></div></div>';}).join('')+'</div>';}
 
 /* 부트스트랩 */
-async function svcCheck(){try{await jget('/health');$('svcDot').className='dot ok';$('svcTxt').textContent='서비스 온라인';}
+let MOCK={};
+const MOCK_LABEL={vexa:'봇 참석',llm:'회의록 작성',asr:'전사',diarizer:'화자분리'};
+function applyMock(m){MOCK=m||{};const b=$('modeBadge');
+ if(m&&m.any){const parts=Object.keys(MOCK_LABEL).filter(k=>m[k]).map(k=>MOCK_LABEL[k]);
+  b.className='modebadge on';
+  b.innerHTML='🧪 흉내 모드(mock)<br><span style="font-weight:500;font-size:11px">'+parts.join(' · ')+' — 실제 동작 안 함</span>';
+  b.title='흉내(mock) 대상: '+parts.join(', ')+'\n실제로 회의에 참석하거나 전사·회의록을 만들지 않고, 예시 응답만 줘요.\n실전은 .env 의 *_=mock 을 지우고 Vexa/모델을 켜세요.';}
+ else b.className='modebadge';}
+async function svcCheck(){try{const h=await jget('/health');$('svcDot').className='dot ok';$('svcTxt').textContent='서비스 온라인';applyMock(h.mock);}
  catch(e){$('svcDot').className='dot bad';$('svcTxt').textContent='서비스 오프라인';}}
 async function refreshBadges(){try{const d=await jget('/api/files');const f=d.files||[];
  $('bTr').textContent=f.filter(x=>x.kind==='transcript').length;$('bMn').textContent=f.filter(x=>x.kind==='minutes').length;}catch(e){}}

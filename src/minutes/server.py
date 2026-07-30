@@ -43,6 +43,16 @@ def _data_dir() -> Path:
     return Path(os.environ.get("MINUTES_HOME", ".")) / "data"
 
 
+def _mock_flags() -> dict:
+    """어떤 하위 시스템이 흉내(mock) 모드인지 — 대시보드가 배지로 알려주기 위함."""
+    def m(k: str) -> bool:
+        return os.environ.get(k, "").lower() == "mock"
+
+    v, llm, asr, dia = m("VEXA_CLIENT"), m("LLM_PROVIDER"), m("ASR_ENGINE"), m("DIARIZER")
+    return {"vexa": v, "llm": llm, "asr": asr, "diarizer": dia,
+            "any": v or llm or asr or dia}
+
+
 def _meeting(body: dict) -> str:
     m = body.get("meeting") or body.get("meetingId") or body.get("native_meeting_id")
     if not m:
@@ -86,7 +96,7 @@ def _result(stem: str, segments: list, minutes) -> dict:
 
 # ---- 엔드포인트 핸들러(params = GET 쿼리 또는 POST JSON 바디) ----
 def ep_health(_p: dict) -> dict:
-    return {"ok": True, "service": "minutes.server"}
+    return {"ok": True, "service": "minutes.server", "mock": _mock_flags()}
 
 
 def ep_status(_p: dict) -> dict:
@@ -94,7 +104,7 @@ def ep_status(_p: dict) -> dict:
         vexa = select_vexa_client().bot_status()
     except Exception as e:  # Vexa 미기동 등 — 대시보드가 죽지 않게 오류를 값으로
         vexa = {"error": str(e)}
-    return {"ok": True, "vexa": vexa}
+    return {"ok": True, "vexa": vexa, "mock": _mock_flags()}
 
 
 def ep_files(_p: dict) -> dict:

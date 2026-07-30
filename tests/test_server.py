@@ -15,6 +15,19 @@ def test_health():
     assert server.ep_health({})["ok"] is True
 
 
+def test_health_reports_mock_mode(monkeypatch):
+    monkeypatch.delenv("VEXA_CLIENT", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    assert server.ep_health({})["mock"]["any"] is False
+    monkeypatch.setenv("VEXA_CLIENT", "mock")
+    m = server.ep_health({})["mock"]
+    assert m["vexa"] is True and m["any"] is True
+
+
+def test_dashboard_has_mock_badge():
+    assert "modeBadge" in server.INDEX_HTML and "흉내 모드" in server.INDEX_HTML
+
+
 def test_ep_ingest_mock(tmp_path, monkeypatch):
     monkeypatch.setenv("VEXA_CLIENT", "mock")
     monkeypatch.setenv("LLM_PROVIDER", "mock")
