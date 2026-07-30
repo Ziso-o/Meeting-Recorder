@@ -113,9 +113,14 @@ CLI가 불편하면 `minutes.server`를 켜고 브라우저로 열면 된다. **
 표준 라이브러리 HTTP 서비스가 토스풍 대시보드(좌측 네비 + 4개 뷰)를 그대로 서빙한다.
 
 ```bash
-python -m minutes.server                          # http://127.0.0.1:8900/
-VEXA_CLIENT=mock LLM_PROVIDER=mock python -m minutes.server   # 키·봇 없이 UI만 둘러보기
+# Git Bash(집 PC): 활성화 없이 venv 파이썬 직접 지정 — No module 오류 안 남
+.venv/Scripts/python -m minutes.server                          # → http://127.0.0.1:8900/
+VEXA_CLIENT=mock LLM_PROVIDER=mock .venv/Scripts/python -m minutes.server   # 키·봇 없이 UI만
+
+# (또는) 활성화 후 python 그대로.  Linux·mac 은 .venv/bin/python
+source .venv/Scripts/activate && python -m minutes.server
 ```
+> 켠 뒤 브라우저에서 **http://127.0.0.1:8900/** 접속. 터미널은 켜둔 채로, 종료는 `Ctrl+C`.
 
 | 좌측 네비 | 하는 일 |
 |---|---|
