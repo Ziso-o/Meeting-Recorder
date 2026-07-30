@@ -97,14 +97,21 @@ git pull origin claude/meeting-minutes-automation-07augh
 
 `make all`이 로컬에서 API 키(`vxa_...`)를 자동 생성한다. Vexa Cloud 계정/토큰 불필요.
 
+> ⚠️ **Windows는 Git Bash가 아니라 WSL2(우분투) 터미널에서.** Vexa는 Docker 다중 컨테이너
+> 스택이라 Git Bash엔 `make`도 없고 실행도 안 된다. **Docker Desktop(WSL2 엔진) + make 필요.**
+> **GPU 없는 저사양 PC면 Vexa를 켜지 말고 mock 유지**(내장 STT가 GPU 사용).
+
 ```bash
+# WSL2(우분투) 터미널에서:
+sudo apt update && sudo apt install -y make git   # WSL엔 make 설치
 git clone https://github.com/Vexa-ai/vexa.git && cd vexa
 make all      # 전체 스택(게이트웨이 :18056, UI :13000). 출력의 vxa_ 키를 우리 .env 에
 make bot      # 회의 봇
 ```
 
 - 요구사양: **Docker ≥ v26, 8 vCPU / 16 GB RAM**. 전사 GPU 유닛까지 셀프호스팅 시 **완전 air-gapped**(B2G).
-- 지원 플랫폼: `google_meet` · `zoom` · `teams` · `jitsi`. 상세 [`docs/VEXA_SELFHOST_WINDOWS.md`](./docs/VEXA_SELFHOST_WINDOWS.md).
+- Docker Desktop(WSL2)은 포트를 Windows `localhost`로 노출 → 대시보드는 Windows에서 그대로 `localhost:18056`에 붙는다.
+- 지원 플랫폼: `google_meet` · `zoom` · `teams` · `jitsi`. 상세(사전준비·GPU·트러블슈팅) [`docs/VEXA_SELFHOST_WINDOWS.md`](./docs/VEXA_SELFHOST_WINDOWS.md).
 
 ## 5. n8n 자동화 (선택)
 
