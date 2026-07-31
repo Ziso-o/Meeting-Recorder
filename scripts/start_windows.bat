@@ -17,10 +17,14 @@ set "VEXA_DIR=~/vexa"
 echo(
 echo [1/4] Docker 엔진 확인...
 wsl -e bash -c "docker info >/dev/null 2>&1"
-if errorlevel 1 (
-  echo    Docker 가 꺼져 있어 Docker Desktop 을 실행합니다...
-  start "" "%ProgramFiles%\Docker\Docker\Docker Desktop.exe"
-)
+if not errorlevel 1 goto dockerready
+
+echo    Docker 가 꺼져 있어 Docker Desktop 을 실행합니다...
+REM 설치 위치가 환경마다 달라 존재하는 경로를 찾아 실행 (블록 밖 = 즉시 확장, 함정 회피)
+set "DOCKER_EXE=%LOCALAPPDATA%\Programs\DockerDesktop\Docker Desktop.exe"
+if not exist "%DOCKER_EXE%" set "DOCKER_EXE=%ProgramFiles%\Docker\Docker\Docker Desktop.exe"
+if exist "%DOCKER_EXE%" (start "" "%DOCKER_EXE%") else (echo    [주의] Docker Desktop 실행파일을 못 찾음 - 수동으로 켜주세요.)
+
 :waitdocker
 wsl -e bash -c "docker info >/dev/null 2>&1" && goto dockerready
 echo    Docker 엔진 뜰 때까지 대기 중... (처음엔 30초~1분)
