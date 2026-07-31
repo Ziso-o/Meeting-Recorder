@@ -81,6 +81,8 @@ git pull origin claude/meeting-minutes-automation-07augh
 > - 흉내↔실제 전환은 대시보드 **좌측 스위치**로. (실제 모드는 `.env`에 Vexa 주소·키 필요)
 > - 종료는 `Ctrl+C`. 외부(다른 PC/폰) 접속은 `MINUTES_SERVER_HOST=0.0.0.0` (신뢰 네트워크·B2G 정책 확인 후).
 > - 스크립트 자동화가 필요하면 CLI(`minutes.pipeline` · `bot` · `watch`)도 그대로 있음.
+> - **재부팅 후 원클릭**: 집 PC(Vexa 셀프호스팅)라면 `scripts/start_windows.bat` 더블클릭 →
+>   Docker·Vexa·STT·대시보드까지 한 번에 켜짐(설치·키는 그대로 유지되므로 재설정 불필요).
 
 **웹 대시보드 4개 뷰**
 
