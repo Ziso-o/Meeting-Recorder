@@ -173,8 +173,11 @@ INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
     <h3>회의록 작성 <span class="desc" style="font-weight:500">회의가 끝난 뒤</span></h3>
     <p class="desc">Vexa 전사를 가져와 회의록을 만들어요.</p>
     <div class="field">
-     <input class="input" id="mid" placeholder="회의 ID (예: abc-defg-hij)">
-     <select class="select" id="profile" style="flex:0 0 150px"><option value="secure">secure · 로컬</option><option value="internal">internal</option></select>
+     <input class="input" id="mid" placeholder="회의 링크 또는 ID (참석 때와 동일)">
+     <select class="select" id="miPlat" style="flex:0 0 130px" title="링크 대신 ID만 넣을 때 플랫폼">
+      <option value="google_meet">Google Meet</option><option value="zoom">Zoom</option>
+      <option value="teams">Teams</option><option value="jitsi">Jitsi</option></select>
+     <select class="select" id="profile" style="flex:0 0 140px"><option value="secure">secure · 로컬</option><option value="internal">internal</option></select>
      <button class="btn pri" id="ingBtn" onclick="ingest()">회의록 만들기</button>
      <button class="btn gray" onclick="stopBot()">봇 종료</button>
     </div>
@@ -239,10 +242,13 @@ async function joinBot(){const url=$('url').value.trim(); if(!url)return toast('
   '<b>'+esc(r.platform||'')+'</b><span style="color:var(--sub)">·</span><code style="background:var(--pri-soft);padding:3px 8px;border-radius:7px">'+esc(r.native_meeting_id||'')+'</code>'+
   (MOCK.vexa?'<span class="chip w" style="margin-left:auto">🧪 흉내 응답 · 실제 참석 아님</span>':'');
  toast(MOCK.vexa?'흉내 모드예요 — 실제 참석은 아니에요':'봇에게 참석을 요청했어요',MOCK.vexa?'warn':'ok');}
-async function stopBot(){const m=$('mid').value.trim(); if(!m)return toast('회의 ID를 넣어 주세요','err');
- const r=await jpost('/bot/stop',{meeting:m}); toast(r.ok===false?('종료하지 못했어요: '+esc(r.error)):'봇을 종료했어요',r.ok===false?'err':'ok');}
-async function ingest(){const m=$('mid').value.trim(),p=$('profile').value; if(!m)return toast('회의 ID를 넣어 주세요','err');
- busy('ingBtn',true); let r; try{r=await jpost('/ingest',{meeting:m,profile:p});}catch(e){busy('ingBtn',false,'회의록 만들기');return toast('서버에 연결하지 못했어요','err');}
+/* 회의 링크면 url로, 맨 ID면 platform+meeting 으로 (zoom/teams/meet/jitsi 공통) */
+function meetingArgs(){const v=$('mid').value.trim(); if(!v)return null;
+ return v.includes('/') ? {url:v} : {platform:$('miPlat').value, meeting:v};}
+async function stopBot(){const t=meetingArgs(); if(!t)return toast('회의 링크 또는 ID를 넣어 주세요','err');
+ const r=await jpost('/bot/stop',t); toast(r.ok===false?('종료하지 못했어요: '+esc(r.error)):'봇을 종료했어요',r.ok===false?'err':'ok');}
+async function ingest(){const t=meetingArgs(),p=$('profile').value; if(!t)return toast('회의 링크 또는 ID를 넣어 주세요','err');
+ busy('ingBtn',true); let r; try{r=await jpost('/ingest',{...t,profile:p});}catch(e){busy('ingBtn',false,'회의록 만들기');return toast('서버에 연결하지 못했어요','err');}
  busy('ingBtn',false,'회의록 만들기'); const res=$('ingRes');
  if(r.ok===false){res.className='result show err';res.innerHTML='<span class="chip r">실패</span>'+esc(r.error||'오류가 났어요');toast('회의록을 만들지 못했어요','err');return;}
  res.className='result show';res.innerHTML='<span class="chip g">완료</span>세그먼트 '+r.segments+' · 결정 '+r.decisions+' · 액션 '+r.action_items+

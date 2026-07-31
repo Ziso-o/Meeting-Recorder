@@ -71,6 +71,17 @@ def _meeting(body: dict) -> str:
     return str(m)
 
 
+def _resolve_target(body: dict) -> tuple[str, str]:
+    """회의 링크(url) 또는 platform+meeting 에서 (platform, native_meeting_id)를 뽑는다.
+
+    url이 있으면 거기서 플랫폼까지 자동 인식(zoom/teams/meet/jitsi 공통).
+    """
+    if body.get("url"):
+        parsed = parse_meeting_url(body["url"])
+        return parsed["platform"], parsed["native_meeting_id"]
+    return body.get("platform", "google_meet"), _meeting(body)
+
+
 def _default_stem(profile: str, meeting: str) -> str:
     home = os.environ.get("MINUTES_HOME", ".")
     safe = "".join(c if (c.isalnum() or c in "-_") else "_" for c in meeting)
@@ -194,13 +205,13 @@ def ep_bot_dispatch(body: dict) -> dict:
 
 
 def ep_bot_stop(body: dict) -> dict:
+    platform, meeting = _resolve_target(body)
     client = select_vexa_client()
-    return client.stop_bot(body.get("platform", "google_meet"), _meeting(body))
+    return client.stop_bot(platform, meeting)
 
 
 def ep_ingest(body: dict) -> dict:
-    platform = body.get("platform", "google_meet")
-    meeting = _meeting(body)
+    platform, meeting = _resolve_target(body)
     profile = body.get("profile", "internal")
     client = select_vexa_client()
     segments = vexa_to_segments(client.get_transcript(platform, meeting))

@@ -77,6 +77,26 @@ def test_ep_bot_dispatch_mock(monkeypatch):
     assert res["status"] == "requested"
 
 
+def test_resolve_target_url_and_fields():
+    # 링크면 플랫폼 자동 인식(zoom), 필드면 그대로
+    assert server._resolve_target(
+        {"url": "https://us05web.zoom.us/j/85130931937?pwd=x"}
+    ) == ("zoom", "85130931937")
+    assert server._resolve_target({"platform": "teams", "meeting": "19:abc"}) == ("teams", "19:abc")
+    assert server._resolve_target({"meeting": "abc-defg-hij"}) == ("google_meet", "abc-defg-hij")
+
+
+def test_ep_ingest_by_url_mock(tmp_path, monkeypatch):
+    monkeypatch.setenv("VEXA_CLIENT", "mock")
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    out = tmp_path / "z"
+    res = server.ep_ingest(
+        {"url": "https://us05web.zoom.us/j/85130931937", "profile": "secure",
+         "glossary": str(ROOT / "glossary.yaml"), "out": str(out)}
+    )
+    assert res["ok"] is True and res["segments"] >= 1
+
+
 def test_meeting_field_missing_raises():
     import pytest
 
