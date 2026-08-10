@@ -173,10 +173,7 @@ INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
     <h3>회의록 작성 <span class="desc" style="font-weight:500">회의가 끝난 뒤</span></h3>
     <p class="desc">Vexa 전사를 가져와 회의록을 만들어요.</p>
     <div class="field">
-     <input class="input" id="mid" placeholder="회의 링크 또는 ID (참석 때와 동일)">
-     <select class="select" id="miPlat" style="flex:0 0 130px" title="링크 대신 ID만 넣을 때 플랫폼">
-      <option value="google_meet">Google Meet</option><option value="zoom">Zoom</option>
-      <option value="teams">Teams</option><option value="jitsi">Jitsi</option></select>
+     <input class="input" id="mid" placeholder="회의 링크 붙여넣기 (참석 때와 동일) — 플랫폼 자동 인식">
      <select class="select" id="profile" style="flex:0 0 140px"><option value="secure">secure · 로컬</option><option value="internal">internal</option></select>
      <button class="btn pri" id="ingBtn" onclick="ingest()">회의록 만들기</button>
      <button class="btn gray" onclick="stopBot()">봇 종료</button>
@@ -242,9 +239,9 @@ async function joinBot(){const url=$('url').value.trim(); if(!url)return toast('
   '<b>'+esc(r.platform||'')+'</b><span style="color:var(--sub)">·</span><code style="background:var(--pri-soft);padding:3px 8px;border-radius:7px">'+esc(r.native_meeting_id||'')+'</code>'+
   (MOCK.vexa?'<span class="chip w" style="margin-left:auto">🧪 흉내 응답 · 실제 참석 아님</span>':'');
  toast(MOCK.vexa?'흉내 모드예요 — 실제 참석은 아니에요':'봇에게 참석을 요청했어요',MOCK.vexa?'warn':'ok');}
-/* 회의 링크면 url로, 맨 ID면 platform+meeting 으로 (zoom/teams/meet/jitsi 공통) */
+/* 회의 링크면 url로(플랫폼 자동 인식), 맨 ID면 meeting 으로(서버가 형태로 추정) */
 function meetingArgs(){const v=$('mid').value.trim(); if(!v)return null;
- return v.includes('/') ? {url:v} : {platform:$('miPlat').value, meeting:v};}
+ return v.includes('/') ? {url:v} : {meeting:v};}
 async function stopBot(){const t=meetingArgs(); if(!t)return toast('회의 링크 또는 ID를 넣어 주세요','err');
  const r=await jpost('/bot/stop',t); toast(r.ok===false?('종료하지 못했어요: '+esc(r.error)):'봇을 종료했어요',r.ok===false?'err':'ok');}
 async function ingest(){const t=meetingArgs(),p=$('profile').value; if(!t)return toast('회의 링크 또는 ID를 넣어 주세요','err');

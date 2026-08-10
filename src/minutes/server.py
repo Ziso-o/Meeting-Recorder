@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
@@ -71,15 +72,26 @@ def _meeting(body: dict) -> str:
     return str(m)
 
 
+def _infer_platform(meeting: str) -> str:
+    """링크 없이 ID만 들어왔을 때 형태로 플랫폼을 추정한다(추정 실패 시 google_meet)."""
+    if re.fullmatch(r"[a-z]{3}-[a-z]{4}-[a-z]{3}", meeting):
+        return "google_meet"            # abc-defg-hij
+    if re.fullmatch(r"\d{9,11}", meeting):
+        return "zoom"                    # 85130931937
+    return "google_meet"
+
+
 def _resolve_target(body: dict) -> tuple[str, str]:
     """회의 링크(url) 또는 platform+meeting 에서 (platform, native_meeting_id)를 뽑는다.
 
     url이 있으면 거기서 플랫폼까지 자동 인식(zoom/teams/meet/jitsi 공통).
+    링크 없이 ID만 있으면 body의 platform → 없으면 ID 형태로 추정.
     """
     if body.get("url"):
         parsed = parse_meeting_url(body["url"])
         return parsed["platform"], parsed["native_meeting_id"]
-    return body.get("platform", "google_meet"), _meeting(body)
+    meeting = _meeting(body)
+    return body.get("platform") or _infer_platform(meeting), meeting
 
 
 def _default_stem(profile: str, meeting: str) -> str:

@@ -78,12 +78,17 @@ def test_ep_bot_dispatch_mock(monkeypatch):
 
 
 def test_resolve_target_url_and_fields():
-    # 링크면 플랫폼 자동 인식(zoom), 필드면 그대로
+    # 링크면 플랫폼 자동 인식(zoom), 명시 platform이면 그대로
     assert server._resolve_target(
         {"url": "https://us05web.zoom.us/j/85130931937?pwd=x"}
     ) == ("zoom", "85130931937")
     assert server._resolve_target({"platform": "teams", "meeting": "19:abc"}) == ("teams", "19:abc")
+
+
+def test_infer_platform_from_bare_id():
+    # 링크·platform 없이 ID만 → 형태로 추정
     assert server._resolve_target({"meeting": "abc-defg-hij"}) == ("google_meet", "abc-defg-hij")
+    assert server._resolve_target({"meeting": "85130931937"}) == ("zoom", "85130931937")
 
 
 def test_ep_ingest_by_url_mock(tmp_path, monkeypatch):
