@@ -141,6 +141,45 @@ def test_ep_file_path_traversal_blocked(tmp_path, monkeypatch):
         server.ep_file({"path": "../../etc/passwd"})
 
 
+def test_dispatch_registers_tracking(monkeypatch):
+    monkeypatch.setenv("VEXA_CLIENT", "mock")
+    server._TRACKED.clear()
+    server.ep_bot_dispatch({"url": "https://meet.google.com/abc-defg-hij", "profile": "secure"})
+    tr = server.ep_tracked({})["tracked"]
+    assert any(t["meeting"] == "abc-defg-hij" and t["status"] == "waiting" for t in tr)
+    server._TRACKED.clear()
+
+
+def test_dispatch_auto_false_no_tracking(monkeypatch):
+    monkeypatch.setenv("VEXA_CLIENT", "mock")
+    server._TRACKED.clear()
+    server.ep_bot_dispatch({"platform": "google_meet", "meeting": "no-track", "auto": False})
+    assert server.ep_tracked({})["tracked"] == []
+
+
+def test_watch_generates_after_meeting_ends(tmp_path, monkeypatch):
+    # 참석(live)했다가 봇이 사라지면 → 자동 회의록 생성(done)
+    monkeypatch.setenv("VEXA_CLIENT", "mock")
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    monkeypatch.setenv("MINUTES_HOME", str(tmp_path))
+    monkeypatch.chdir(ROOT)  # glossary.yaml 상대경로
+    server._TRACKED.clear()
+    key = ("google_meet", "m-auto")
+    server._track(*key, "secure", "자동테스트")
+
+    # 1) 봇이 실행 중으로 보이게 → live/seen
+    monkeypatch.setattr(server, "_running_keys", lambda s: {key})
+    server._watch_once()
+    assert server._TRACKED[key]["status"] == "live"
+
+    # 2) 봇이 사라짐 → 생성 완료
+    monkeypatch.setattr(server, "_running_keys", lambda s: set())
+    server._watch_once()
+    assert server._TRACKED[key]["status"] == "done"
+    assert server._TRACKED[key]["stem"]
+    server._TRACKED.clear()
+
+
 def test_dashboard_has_nav():
     for label in ("회의 참석", "상태 모니터링", "녹취파일", "회의록"):
         assert label in server.INDEX_HTML

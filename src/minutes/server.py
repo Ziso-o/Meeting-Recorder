@@ -27,6 +27,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
@@ -199,6 +201,32 @@ def ep_mode(body: dict) -> dict:
     return {"ok": True, "mock": _mock_flags()}
 
 
+# ---- 참석 회의 추적 → 회의 끝나면 자동 회의록 (폴링) ----
+_TRACKED: dict[tuple[str, str], dict] = {}
+_TLOCK = threading.Lock()
+
+
+def _track(platform: str, meeting: str, profile: str, title: str) -> None:
+    with _TLOCK:
+        _TRACKED[(platform, meeting)] = {
+            "platform": platform, "meeting": meeting, "profile": profile, "title": title,
+            "status": "waiting", "seen": False, "since": time.time(), "stem": "", "error": "",
+        }
+
+
+def _running_keys(status: dict) -> set[tuple[str, str]]:
+    """Vexa bot_status 응답에서 (platform, meeting) 집합을 뽑는다(형태 관대하게)."""
+    bots = status.get("running_bots") or status.get("running") or status.get("bots") or []
+    keys: set[tuple[str, str]] = set()
+    for b in bots if isinstance(bots, list) else []:
+        if isinstance(b, dict):
+            p = b.get("platform") or b.get("platform_name")
+            m = b.get("native_meeting_id") or b.get("meeting") or b.get("meeting_id") or b.get("id")
+            if p and m:
+                keys.add((str(p), str(m)))
+    return keys
+
+
 def ep_bot_dispatch(body: dict) -> dict:
     passcode = body.get("passcode", "")
     meeting_url = ""
@@ -212,8 +240,18 @@ def ep_bot_dispatch(body: dict) -> dict:
         platform = body.get("platform", "google_meet")
         meeting = _meeting(body)
     client = select_vexa_client()
-    return client.request_bot(platform, meeting, language=body.get("language", "ko"),
-                              passcode=passcode, meeting_url=meeting_url)
+    res = client.request_bot(platform, meeting, language=body.get("language", "ko"),
+                             passcode=passcode, meeting_url=meeting_url)
+    # 자동 회의록: 참석 성공 시 회의를 추적 목록에 등록(회의 끝나면 워처가 생성)
+    if body.get("auto", True) and str(res.get("status", "")).lower() != "error":
+        _track(platform, meeting, body.get("profile", "secure"), body.get("title", ""))
+    return res
+
+
+def ep_tracked(_p: dict) -> dict:
+    with _TLOCK:
+        items = sorted(_TRACKED.values(), key=lambda x: x["since"], reverse=True)
+        return {"ok": True, "tracked": [dict(x) for x in items]}
 
 
 def ep_bot_stop(body: dict) -> dict:
@@ -222,20 +260,60 @@ def ep_bot_stop(body: dict) -> dict:
     return client.stop_bot(platform, meeting)
 
 
-def ep_ingest(body: dict) -> dict:
-    platform, meeting = _resolve_target(body)
-    profile = body.get("profile", "internal")
+def _generate(platform: str, meeting: str, profile: str, *, out: str = "",
+              title: str = "", date: str = "", glossary_path: str = "glossary.yaml") -> dict:
+    """Vexa 전사 → 회의록 생성(수동 ingest·자동 워처 공용)."""
     client = select_vexa_client()
     segments = vexa_to_segments(client.get_transcript(platform, meeting))
     if not segments:
         raise ValueError("Vexa 전사에서 세그먼트를 찾지 못함")
-    glossary = load_glossary(body.get("glossary", "glossary.yaml"))
-    meta = {"meeting_title": body.get("title", ""), "date": body.get("date", ""),
-            "source": f"vexa:{meeting}"}
+    glossary = load_glossary(glossary_path)
+    meta = {"meeting_title": title, "date": date, "source": f"vexa:{meeting}"}
     minutes = generate_minutes(segments, provider_for_profile(profile), glossary=glossary, meta=meta)
-    stem = body.get("out") or _default_stem(profile, meeting)
+    stem = out or _default_stem(profile, meeting)
     _write(stem, meta, segments, minutes)
     return _result(stem, segments, minutes)
+
+
+def ep_ingest(body: dict) -> dict:
+    platform, meeting = _resolve_target(body)
+    return _generate(platform, meeting, body.get("profile", "internal"),
+                     out=body.get("out", ""), title=body.get("title", ""),
+                     date=body.get("date", ""), glossary_path=body.get("glossary", "glossary.yaml"))
+
+
+def _watch_once() -> None:
+    """추적 중 회의를 1회 점검: 봇이 나갔으면(회의 종료) 자동으로 회의록 생성."""
+    try:
+        status = select_vexa_client().bot_status()
+    except Exception:
+        return
+    running = _running_keys(status)
+    with _TLOCK:
+        targets = list(_TRACKED.items())
+    for key, t in targets:
+        if t["status"] in ("done", "failed", "timeout"):
+            continue
+        if key in running:
+            with _TLOCK:
+                t["status"], t["seen"] = "live", True
+        elif t["seen"]:  # 참석했다가 사라짐 = 회의 종료 → 생성
+            try:
+                r = _generate(t["platform"], t["meeting"], t["profile"], title=t["title"])
+                with _TLOCK:
+                    t["status"], t["stem"] = "done", r["stem"]
+            except Exception as e:  # 전사 아직 없음 등 — 다음 주기에 재시도되지 않게 실패 표시
+                with _TLOCK:
+                    t["status"], t["error"] = "failed", str(e)
+        elif time.time() - t["since"] > 900:  # 15분간 참석 확인 안 됨 → 타임아웃
+            with _TLOCK:
+                t["status"] = "timeout"
+
+
+def _watch_loop(interval: float = 20.0) -> None:
+    while True:
+        _watch_once()
+        time.sleep(interval)
 
 
 def ep_pipeline(body: dict) -> dict:
@@ -259,6 +337,7 @@ ROUTES: dict[tuple[str, str], Callable[[dict], dict]] = {
     ("GET", "/api/status"): ep_status,
     ("GET", "/api/files"): ep_files,
     ("GET", "/api/file"): ep_file,
+    ("GET", "/api/tracked"): ep_tracked,
     ("POST", "/mode"): ep_mode,
     ("POST", "/bot/dispatch"): ep_bot_dispatch,
     ("POST", "/bot/stop"): ep_bot_stop,
@@ -322,8 +401,10 @@ def main(argv: list[str] | None = None) -> int:
     host = os.environ.get("MINUTES_SERVER_HOST", "127.0.0.1")
     port = int(os.environ.get("MINUTES_SERVER_PORT", "8900"))
     httpd = ThreadingHTTPServer((host, port), Handler)
+    threading.Thread(target=_watch_loop, daemon=True).start()  # 회의 끝나면 자동 회의록
     print(f"minutes.server 시작: http://{host}:{port}  (Ctrl+C 종료)")
     print(f"  웹 대시보드: http://{host}:{port}/   (참석 / 상태 / 녹취파일 / 회의록)")
+    print("  자동 회의록: 참석한 회의가 끝나면 워처가 전사→회의록을 자동 생성합니다.")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

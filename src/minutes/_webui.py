@@ -165,13 +165,21 @@ INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
     <h3>봇 참석</h3><p class="desc">Google Meet · Zoom · Teams · Jitsi 링크를 넣을 수 있어요.</p>
     <div class="field">
      <input class="input" id="url" placeholder="https://meet.google.com/abc-defg-hij" onkeydown="if(event.key==='Enter')joinBot()">
+     <select class="select" id="joinProfile" style="flex:0 0 140px"><option value="secure">secure · 로컬</option><option value="internal">internal</option></select>
      <button class="btn pri" id="joinBtn" onclick="joinBot()">참석시키기</button>
     </div>
+    <label style="display:flex;align-items:center;gap:7px;margin-top:12px;font-size:13.5px;color:var(--sub);cursor:pointer">
+     <input type="checkbox" id="autoMin" checked> 회의가 끝나면 회의록을 <b style="color:var(--text);margin:0 2px">자동으로</b> 만들어요
+    </label>
     <div class="result" id="joinRes"></div>
    </div>
+   <div class="card" id="trackCard" style="display:none">
+    <h3>자동 회의록 진행 <span class="desc" style="font-weight:500">참석한 회의가 끝나면 자동 생성</span></h3>
+    <div class="flist" id="trackList" style="margin-top:14px"></div>
+   </div>
    <div class="card">
-    <h3>회의록 작성 <span class="desc" style="font-weight:500">회의가 끝난 뒤</span></h3>
-    <p class="desc">Vexa 전사를 가져와 회의록을 만들어요.</p>
+    <h3>회의록 작성 <span class="desc" style="font-weight:500">수동 · 자동이 안 됐을 때만</span></h3>
+    <p class="desc">보통은 위 자동 생성으로 충분해요. 필요할 때만 링크로 직접 만듭니다.</p>
     <div class="field">
      <input class="input" id="mid" placeholder="회의 링크 붙여넣기 (참석 때와 동일) — 플랫폼 자동 인식">
      <select class="select" id="profile" style="flex:0 0 140px"><option value="secure">secure · 로컬</option><option value="internal">internal</option></select>
@@ -232,13 +240,26 @@ function go(v){document.querySelectorAll('.view').forEach(s=>s.classList.toggle(
 
 /* 참석 */
 async function joinBot(){const url=$('url').value.trim(); if(!url)return toast('회의 링크를 넣어 주세요','err');
- busy('joinBtn',true); let r; try{r=await jpost('/bot/dispatch',{url});}catch(e){busy('joinBtn',false,'참석시키기');return toast('서버에 연결하지 못했어요','err');}
+ const profile=$('joinProfile').value, auto=$('autoMin').checked;
+ busy('joinBtn',true); let r; try{r=await jpost('/bot/dispatch',{url,profile,auto});}catch(e){busy('joinBtn',false,'참석시키기');return toast('서버에 연결하지 못했어요','err');}
  busy('joinBtn',false,'참석시키기'); const res=$('joinRes');
  if(r.ok===false){res.className='result show err';res.innerHTML='<span class="chip r">실패</span>'+esc(r.error||'오류가 났어요');toast('참석하지 못했어요','err');return;}
  res.className='result show';res.innerHTML='<span class="chip g">참석 요청됨</span>'+
   '<b>'+esc(r.platform||'')+'</b><span style="color:var(--sub)">·</span><code style="background:var(--pri-soft);padding:3px 8px;border-radius:7px">'+esc(r.native_meeting_id||'')+'</code>'+
+  (auto&&!MOCK.vexa?'<span class="chip" style="margin-left:auto">회의 끝나면 자동 작성</span>':'')+
   (MOCK.vexa?'<span class="chip w" style="margin-left:auto">🧪 흉내 응답 · 실제 참석 아님</span>':'');
- toast(MOCK.vexa?'흉내 모드예요 — 실제 참석은 아니에요':'봇에게 참석을 요청했어요',MOCK.vexa?'warn':'ok');}
+ toast(MOCK.vexa?'흉내 모드예요 — 실제 참석은 아니에요':'봇에게 참석을 요청했어요',MOCK.vexa?'warn':'ok');
+ loadTracked();}
+const TSTAT={waiting:['참석 대기 중…','var(--sub)'],live:['참석 중 · 녹화 중','var(--pri)'],
+ done:['회의록 완료','var(--ok)'],failed:['실패','var(--danger)'],timeout:['시간초과(참석 확인 안 됨)','var(--warn)']};
+async function loadTracked(){let d;try{d=await jget('/api/tracked');}catch(e){return;}
+ const rows=d.tracked||[],card=$('trackCard'); if(!rows.length){card.style.display='none';return;} card.style.display='';
+ $('trackList').innerHTML=rows.map(t=>{const s=TSTAT[t.status]||[t.status,'var(--sub)'];
+  return '<div class="fitem" style="cursor:default"><div class="fic" style="background:var(--pri-soft)">🤖</div>'+
+   '<div style="flex:1"><div class="fname">'+esc(t.platform)+' · '+esc(t.meeting)+'</div>'+
+   '<div class="fmeta" style="color:'+s[1]+'">'+s[0]+(t.error?(' — '+esc(t.error)):'')+'</div></div>'+
+   (t.status==='done'?'<button class="btn pri sm" onclick="go(\'minutes\')">회의록 보기</button>':'')+
+   '</div>';}).join('');}
 /* 회의 링크면 url로(플랫폼 자동 인식), 맨 ID면 meeting 으로(서버가 형태로 추정) */
 function meetingArgs(){const v=$('mid').value.trim(); if(!v)return null;
  return v.includes('/') ? {url:v} : {meeting:v};}
@@ -339,5 +360,5 @@ async function svcCheck(){try{const h=await jget('/health');$('svcDot').classNam
  catch(e){$('svcDot').className='dot bad';$('svcTxt').textContent='서비스 오프라인';}}
 async function refreshBadges(){try{const d=await jget('/api/files');const f=d.files||[];
  $('bTr').textContent=f.filter(x=>x.kind==='transcript').length;$('bMn').textContent=f.filter(x=>x.kind==='minutes').length;}catch(e){}}
-svcCheck();refreshBadges();
+svcCheck();refreshBadges();loadTracked();setInterval(loadTracked,8000);
 </script></body></html>"""
