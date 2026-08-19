@@ -132,6 +132,40 @@ def test_ep_files_and_file(tmp_path, monkeypatch):
     assert "회의록" in got["content"]
 
 
+def test_upload_delete_rename(tmp_path, monkeypatch):
+    monkeypatch.setenv("MINUTES_HOME", str(tmp_path))
+    (tmp_path / "data").mkdir()
+    # 업로드 → 목록에 등장
+    up = server.ep_upload({"kind": "minutes", "name": "우리 회의.md", "content": "# 제목\n결정1"})
+    assert up["ok"] and up["path"].endswith(".minutes.md")
+    files = server.ep_files({})["files"]
+    assert any(f["path"] == up["path"] for f in files)
+    # 이름 변경(확장자 유지)
+    ren = server.ep_rename({"path": up["path"], "name": "새이름"})
+    assert ren["path"].endswith("새이름.minutes.md")
+    # 삭제
+    assert server.ep_delete({"path": ren["path"]})["ok"] is True
+    assert server.ep_files({})["files"] == []
+
+
+def test_delete_traversal_and_type_blocked(tmp_path, monkeypatch):
+    import pytest
+
+    monkeypatch.setenv("MINUTES_HOME", str(tmp_path))
+    (tmp_path / "data").mkdir()
+    with pytest.raises(ValueError):
+        server.ep_delete({"path": "../../etc/passwd"})
+    # 관리 대상 아닌 확장자는 삭제 거부
+    (tmp_path / "data" / "keep.txt").write_text("x", encoding="utf-8")
+    with pytest.raises(ValueError):
+        server.ep_delete({"path": "keep.txt"})
+    assert (tmp_path / "data" / "keep.txt").exists()
+
+
+def test_dashboard_has_upload_controls():
+    assert "doUpload" in server.INDEX_HTML and "renFile" in server.INDEX_HTML
+
+
 def test_ep_file_path_traversal_blocked(tmp_path, monkeypatch):
     import pytest
 

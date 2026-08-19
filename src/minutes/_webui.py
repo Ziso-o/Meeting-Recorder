@@ -110,6 +110,10 @@ INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
  .fitem.sel{border-color:var(--pri);background:var(--pri-tint)}
  .fitem .fic{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-size:17px;flex-shrink:0}
  .fitem .fname{font-weight:700;font-size:14.5px} .fitem .fmeta{color:var(--sub);font-size:12px;margin-top:2px}
+ .iconbtn{flex-shrink:0;border:0;background:transparent;color:var(--sub);cursor:pointer;font-size:15px;
+  width:30px;height:30px;border-radius:8px;transition:.12s;opacity:.55}
+ .fitem:hover .iconbtn{opacity:1} .iconbtn:hover{background:var(--fill-2);color:var(--text)}
+ .iconbtn.del:hover{background:var(--danger-soft);color:var(--danger)}
  .split{display:grid;grid-template-columns:340px 1fr;gap:18px}
  @media(max-width:820px){.split{grid-template-columns:1fr}}
  .viewer{background:var(--card);border-radius:var(--r);box-shadow:var(--sh);padding:26px 28px;min-height:300px}
@@ -202,7 +206,12 @@ INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
 
   <section id="transcript" class="view">
    <div class="split">
-    <div><div style="margin-bottom:10px"><button class="btn gray sm" onclick="loadFiles('transcript')">↻ 새로고침</button></div>
+    <div>
+     <div style="margin-bottom:10px;display:flex;gap:8px">
+      <button class="btn gray sm" onclick="loadFiles('transcript')">↻ 새로고침</button>
+      <button class="btn gray sm" onclick="$('upTr').click()">⬆ 업로드</button>
+      <input type="file" id="upTr" accept=".json" style="display:none" onchange="doUpload('transcript',this)">
+     </div>
      <div class="flist" id="trList"></div></div>
     <div class="viewer" id="trView"><div class="empty"><div class="big">🎙</div>왼쪽에서 녹취파일을 골라 보세요.</div></div>
    </div>
@@ -210,7 +219,12 @@ INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
 
   <section id="minutes" class="view">
    <div class="split">
-    <div><div style="margin-bottom:10px"><button class="btn gray sm" onclick="loadFiles('minutes')">↻ 새로고침</button></div>
+    <div>
+     <div style="margin-bottom:10px;display:flex;gap:8px">
+      <button class="btn gray sm" onclick="loadFiles('minutes')">↻ 새로고침</button>
+      <button class="btn gray sm" onclick="$('upMn').click()">⬆ 업로드</button>
+      <input type="file" id="upMn" accept=".md,.markdown,.txt" style="display:none" onchange="doUpload('minutes',this)">
+     </div>
      <div class="flist" id="mnList"></div></div>
     <div class="viewer" id="mnView"><div class="empty"><div class="big">📄</div>왼쪽에서 회의록을 골라 보세요.</div></div>
    </div>
@@ -302,7 +316,26 @@ async function loadFiles(kind){const listId=kind==='minutes'?'mnList':'trList';c
  const ic=kind==='minutes'?['📄','var(--pri-soft)']:['🎙','var(--ok-soft)'];
  box.innerHTML=rows.map(f=>'<div class="fitem" data-p="'+esc(f.path)+'" onclick="openFile(\''+kind+'\',this)">'+
   '<div class="fic" style="background:'+ic[1]+'">'+ic[0]+'</div>'+
-  '<div><div class="fname">'+esc(f.name)+'</div><div class="fmeta">'+new Date(f.mtime*1000).toLocaleString('ko-KR')+' · '+fmtSize(f.size)+'</div></div></div>').join('');}
+  '<div style="flex:1;min-width:0"><div class="fname">'+esc(f.name)+'</div><div class="fmeta">'+new Date(f.mtime*1000).toLocaleString('ko-KR')+' · '+fmtSize(f.size)+'</div></div>'+
+  '<button class="iconbtn" title="이름 변경" onclick="renFile(event,\''+kind+'\')">✎</button>'+
+  '<button class="iconbtn del" title="삭제" onclick="delFile(event,\''+kind+'\')">🗑</button>'+
+  '</div>').join('');}
+async function doUpload(kind,el){const f=el.files&&el.files[0]; el.value=''; if(!f)return;
+ let text; try{text=await f.text();}catch(e){return toast('파일을 읽지 못했어요','err');}
+ const r=await jpost('/api/upload',{kind,name:f.name,content:text});
+ if(r.ok===false)return toast('업로드 실패: '+esc(r.error),'err');
+ toast('업로드했어요','ok'); loadFiles(kind);}
+async function delFile(ev,kind){ev.stopPropagation();
+ const el=ev.currentTarget.closest('.fitem'),path=el.dataset.p;
+ if(!confirm('이 파일을 삭제할까요?\n'+path))return;
+ const r=await jpost('/api/delete',{path}); if(r.ok===false)return toast('삭제 실패: '+esc(r.error),'err');
+ toast('삭제했어요','ok'); $(kind==='minutes'?'mnView':'trView').innerHTML='<div class="empty">삭제했어요.</div>'; loadFiles(kind);}
+async function renFile(ev,kind){ev.stopPropagation();
+ const el=ev.currentTarget.closest('.fitem'),path=el.dataset.p;
+ const cur=el.querySelector('.fname').textContent.replace(/\.(minutes\.md|transcript\.json)$/,'');
+ const nn=prompt('새 이름 (확장자 빼고):',cur); if(nn===null||!nn.trim())return;
+ const r=await jpost('/api/rename',{path,name:nn.trim()}); if(r.ok===false)return toast('이름 변경 실패: '+esc(r.error),'err');
+ toast('이름을 바꿨어요','ok'); loadFiles(kind);}
 function fmtSize(b){return b<1024?b+' B':(b/1024).toFixed(1)+' KB';}
 async function openFile(kind,el){const listId=kind==='minutes'?'mnList':'trList',viewId=kind==='minutes'?'mnView':'trView';
  document.querySelectorAll('#'+listId+' .fitem').forEach(x=>x.classList.remove('sel'));el.classList.add('sel');

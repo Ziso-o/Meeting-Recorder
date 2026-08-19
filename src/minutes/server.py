@@ -29,18 +29,18 @@ import os
 import re
 import threading
 import time
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from ._webui import INDEX_HTML
 from .chain import generate_minutes
 from .config import load_dotenv, provider_for_profile
 from .glossary import load_glossary
 from .render import render_markdown
 from .vexa import parse_meeting_url, select_vexa_client, vexa_to_segments
-
-from ._webui import INDEX_HTML
 
 
 def _data_dir() -> Path:
@@ -138,7 +138,7 @@ def ep_health(_p: dict) -> dict:
 def ep_status(_p: dict) -> dict:
     try:
         vexa = select_vexa_client().bot_status()
-    except Exception as e:  # Vexa 미기동 등 — 대시보드가 죽지 않게 오류를 값으로
+    except Exception as e:  # noqa: BLE001  Vexa 미기동 등 — 대시보드가 죽지 않게 오류를 값으로
         vexa = {"error": str(e)}
     return {"ok": True, "vexa": vexa, "mock": _mock_flags()}
 
@@ -166,18 +166,84 @@ def ep_files(_p: dict) -> dict:
     return {"ok": True, "files": items}
 
 
-def ep_file(p: dict) -> dict:
-    rel = p.get("path") or ""
+def _safe_target(rel: str) -> Path:
+    """data/ 내부 경로만 허용(경로 탈출 방지)."""
     if not rel:
         raise KeyError("path")
     root = _data_dir().resolve()
     target = (root / rel).resolve()
-    if not target.is_relative_to(root):  # 경로 탈출 방지
+    if not target.is_relative_to(root):
         raise ValueError("허용되지 않은 경로")
+    return target
+
+
+def _kind_suffix(kind: str) -> str:
+    return ".minutes.md" if kind == "minutes" else ".transcript.json"
+
+
+def _safe_stem(name: str) -> str:
+    """파일명에서 안전한 stem 추출(경로·확장자 제거, 위험문자 정리)."""
+    base = name.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    for suf in (".minutes.md", ".transcript.json", ".md", ".json", ".txt"):
+        if base.lower().endswith(suf):
+            base = base[: -len(suf)]
+            break
+    base = "".join(c if (c.isalnum() or c in " -_.()[]") else "_" for c in base).strip()
+    return base or "untitled"
+
+
+def ep_file(p: dict) -> dict:
+    target = _safe_target(p.get("path") or "")
     if not target.is_file():
         raise ValueError("파일을 찾을 수 없음")
-    return {"ok": True, "path": rel, "name": target.name,
+    return {"ok": True, "path": p.get("path"), "name": target.name,
             "content": target.read_text(encoding="utf-8", errors="replace")}
+
+
+def _is_managed(name: str) -> bool:
+    return name.endswith((".minutes.md", ".transcript.json"))
+
+
+def ep_upload(body: dict) -> dict:
+    kind = "minutes" if body.get("kind") == "minutes" else "transcript"
+    content = body.get("content", "")
+    if len(content) > 5_000_000:
+        raise ValueError("파일이 너무 큽니다(5MB 초과)")
+    stem = _safe_stem(body.get("name", "untitled"))
+    d = _data_dir() / "uploads"
+    d.mkdir(parents=True, exist_ok=True)
+    target = d / (stem + _kind_suffix(kind))
+    i = 1  # 덮어쓰기 방지: 같은 이름이면 (n) 붙임
+    while target.exists():
+        target = d / (f"{stem}({i})" + _kind_suffix(kind))
+        i += 1
+    target.write_text(content, encoding="utf-8")
+    return {"ok": True, "path": str(target.relative_to(_data_dir())).replace("\\", "/")}
+
+
+def ep_delete(body: dict) -> dict:
+    target = _safe_target(body.get("path") or "")
+    if not target.is_file():
+        raise ValueError("파일을 찾을 수 없음")
+    if not _is_managed(target.name):
+        raise ValueError("삭제할 수 없는 파일 형식")
+    target.unlink()
+    return {"ok": True}
+
+
+def ep_rename(body: dict) -> dict:
+    target = _safe_target(body.get("path") or "")
+    new = body.get("name", "")
+    if not new:
+        raise KeyError("name")
+    if not target.is_file() or not _is_managed(target.name):
+        raise ValueError("이름을 바꿀 수 없는 파일")
+    kind = "minutes" if target.name.endswith(".minutes.md") else "transcript"
+    dest = target.parent / (_safe_stem(new) + _kind_suffix(kind))
+    if dest.exists() and dest != target:
+        raise ValueError("같은 이름이 이미 있습니다")
+    target.rename(dest)
+    return {"ok": True, "path": str(dest.relative_to(_data_dir())).replace("\\", "/")}
 
 
 def ep_mode(body: dict) -> dict:
@@ -286,7 +352,7 @@ def _watch_once() -> None:
     """추적 중 회의를 1회 점검: 봇이 나갔으면(회의 종료) 자동으로 회의록 생성."""
     try:
         status = select_vexa_client().bot_status()
-    except Exception:
+    except Exception:  # noqa: BLE001
         return
     running = _running_keys(status)
     with _TLOCK:
@@ -302,7 +368,7 @@ def _watch_once() -> None:
                 r = _generate(t["platform"], t["meeting"], t["profile"], title=t["title"])
                 with _TLOCK:
                     t["status"], t["stem"] = "done", r["stem"]
-            except Exception as e:  # 전사 아직 없음 등 — 다음 주기에 재시도되지 않게 실패 표시
+            except Exception as e:  # noqa: BLE001  전사 아직 없음 등 — 다음 주기에 재시도되지 않게 실패 표시
                 with _TLOCK:
                     t["status"], t["error"] = "failed", str(e)
         elif time.time() - t["since"] > 900:  # 15분간 참석 확인 안 됨 → 타임아웃
@@ -338,6 +404,9 @@ ROUTES: dict[tuple[str, str], Callable[[dict], dict]] = {
     ("GET", "/api/files"): ep_files,
     ("GET", "/api/file"): ep_file,
     ("GET", "/api/tracked"): ep_tracked,
+    ("POST", "/api/upload"): ep_upload,
+    ("POST", "/api/delete"): ep_delete,
+    ("POST", "/api/rename"): ep_rename,
     ("POST", "/mode"): ep_mode,
     ("POST", "/bot/dispatch"): ep_bot_dispatch,
     ("POST", "/bot/stop"): ep_bot_stop,
@@ -379,16 +448,16 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, handler(params))
         except KeyError as e:
             self._send(400, {"ok": False, "error": f"필수 필드 누락: {e}"})
-        except Exception as e:  # 복구 가능: 오류를 JSON으로 반환
+        except Exception as e:  # noqa: BLE001  복구 가능: 오류를 JSON으로 반환
             self._send(500, {"ok": False, "error": str(e)})
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         if urlparse(self.path).path in ("/", "/index.html"):
             self._send_html(INDEX_HTML)
             return
         self._dispatch("GET")
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         self._dispatch("POST")
 
     def log_message(self, fmt: str, *args: Any) -> None:
