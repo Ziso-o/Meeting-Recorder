@@ -58,6 +58,13 @@ sed -i '/RANSCRIPTION_SERVICE_URL/d; /TRANSCRIPTION_SERVICE_TOKEN/d' .env
 { echo "TRANSCRIPTION_SERVICE_URL=http://host.docker.internal:8083"
   echo "TRANSCRIPTION_SERVICE_TOKEN=$STT_TOKEN"; } >> .env
 docker compose up -d || die "메인 스택 compose 실패"
+# 봇 이미지 준비 (runtime이 온디맨드로 봇 컨테이너를 띄울 때 필요 — 없으면 502 No such image)
+echo "  봇 이미지 준비(vexaai/vexa-bot:v012)..."
+docker pull vexaai/vexa-bot:v012 2>/dev/null && echo "    pull OK" || {
+  echo "    pull 실패 → make bot 로 빌드 시도"
+  command -v make >/dev/null 2>&1 && (cd "$VEXA_DIR" && make bot) \
+    || echo "    [주의] 봇 이미지 준비 실패 — WSL에서 'sudo apt install -y make && cd ~/vexa && make bot' 수동 실행"
+}
 printf '  게이트웨이 대기'
 for _ in $(seq 1 80); do curl -s -o /dev/null -m 2 http://localhost:18056/bots/status && { echo " OK"; break; }; printf '.'; sleep 3; done
 printf '  admin-api 대기'
