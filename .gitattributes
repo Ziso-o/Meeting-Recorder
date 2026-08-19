@@ -1,0 +1,4 @@
+# 줄바꿈 정규화 — Windows 체크아웃에서도 셸 스크립트는 LF 유지(bash가 \r 로 죽지 않게)
+* text=auto
+*.sh   text eol=lf
+*.bat  text eol=crlf

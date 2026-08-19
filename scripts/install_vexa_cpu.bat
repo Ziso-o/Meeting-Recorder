@@ -19,6 +19,8 @@ if "%SCRIPT_WSL%"=="" (
   pause & exit /b 1
 )
 
+REM 윈도우 체크아웃 시 붙는 CR(\r) 제거 후 실행 (bash가 $'\r' 로 죽는 것 방지)
+wsl -e bash -c "sed -i 's/\r$//' '%SCRIPT_WSL%'"
 wsl -e bash "%SCRIPT_WSL%"
 
 echo.
