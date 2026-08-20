@@ -134,7 +134,8 @@ def test_job_records_engine_duration_and_eta(home, mock_engines, monkeypatch):
 
     real = tr.transcribe_audio
 
-    def fake(audio, glossary_path="glossary.yaml", keep_wav=False, on_phase=None):
+    def fake(audio, glossary_path="glossary.yaml", keep_wav=False, on_phase=None,
+             on_progress=None):
         # 실제 large-v3/CPU 상황을 흉내내 job 에 무엇이 남는지 본다
         if on_phase:
             on_phase("start", {"engine": "faster-whisper", "model": "large-v3",
@@ -142,7 +143,7 @@ def test_job_records_engine_duration_and_eta(home, mock_engines, monkeypatch):
                                "description": "faster-whisper large-v3 · CPU",
                                "repo_id": "Systran/faster-whisper-large-v3", "cached": True})
             on_phase("asr", {})
-        return real(audio, glossary_path, keep_wav)
+        return real(audio, glossary_path, keep_wav, on_progress=on_progress)
 
     monkeypatch.setattr(tr, "transcribe_audio", fake)
     audio = server.save_audio_stream("긴회의.m4a", io.BytesIO(b"x"), 1)
@@ -206,5 +207,6 @@ def test_phase_labels_reflect_diarizer_off():
 def test_dashboard_renders_progress_details():
     html = server.INDEX_HTML
     assert "fmtDur" in html and "phase_elapsed" in html   # 경과 시간
-    assert "dlBar" in html and "dl_total_mb" in html      # 다운로드 진행바
+    assert "progBar" in html and "dl_total_mb" in html    # 진행바(다운로드·전사·회의록 공용)
+    assert "남은 시간 약" in html                          # 실측 기반 잔여 시간
     assert "jobWhy" in html and "전사 예상" in html         # 엔진·디바이스·예상 시간

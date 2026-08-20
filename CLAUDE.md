@@ -179,7 +179,25 @@ Meeting-Recorder/
   감시 스레드로 진행률 표시(huggingface_hub이 콜백을 안 줌).
 - 대시보드: 단계별 경과·전체 경과·다운로드 진행바·`faster-whisper large-v3 · CPU · 녹음 19분 ·
   전사 예상 15분~49분 · 화자분리 꺼짐` 한 줄. 폴링 3s→2s.
-- pytest 115개. 예상 시간은 **범위**로만 준다(하드웨어 편차가 커서 단일값은 거짓말이 됨).
+- 예상 시간은 **범위**로만 준다(하드웨어 편차가 커서 단일값은 거짓말이 됨).
+
+### 긴 회의 타임아웃 장애 + 실제 진행률 (2026-08)
+- **장애**: 19분 회의가 LLM 단계에서 `timed out`. 사슬 전체가 원인이었다.
+  1. `diarizer=off` → 모든 세그먼트가 SPEAKER_00 → `merge_segments`가 **회의 전체를 1개로 병합**
+  2. `chunk_segments`는 세그먼트 **사이**에서만 자름 → 1개면 분할 무력화
+  3. `correct_terms`는 애초에 청크를 안 쓰고 전문을 한 프롬프트로 보냄. 게다가
+     LLM이 **전문을 그대로 다시 출력**해야 함(출력≈입력) → CPU qwen2.5:14b에서 600초 초과
+  4. 그 단계는 "실패해도 원문 유지" 설계인데 `JSONDecodeError/KeyError/TypeError`만 잡아
+     **타임아웃이 작업 전체를 죽임**
+  5. `_write`가 LLM 뒤라 40분 걸린 전사가 통째로 유실
+- **고침**: merge 상한(`MAX_MERGE_CHARS/SEC/GAP` — 228개→19개) · `_split_oversized`로 거대
+  세그먼트 내부 분할 · `correct_terms` 청크화 + **모든 예외 원문 폴백** + `LLM_TERM_CORRECTION=0`
+  스위치 · **전사를 LLM 전에 저장**(`_write_transcript`) · `OLLAMA_TIMEOUT`(기본 1800) +
+  타임아웃 메시지에 model/host/입력크기/해결책 명시.
+- **실제 진행률**: faster-whisper는 세그먼트를 생성기로 내놓고 각 세그먼트에 오디오 타임스탬프가
+  있다 — 리스트로 삼키지 말고 소비하며 `on_progress(done_sec, total_sec)` 통지.
+  회의록은 청크 n/N. 남은 시간은 **실측 처리속도**로 계산(사전 추정 범위는 실측이 생기면 물러남).
+- pytest 129개.
 
 ### 브랜치 단일화 (2026-08, 완료)
 - **이제 브랜치는 `main` 하나뿐이다.** 기본 브랜치도 `main`.

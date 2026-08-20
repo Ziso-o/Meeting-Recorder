@@ -8,6 +8,7 @@ API 키는 .env(GROQ_API_KEY)에서만. httpx는 지연 임포트.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from .base import ASRSegment
@@ -35,7 +36,12 @@ class GroqEngine:
     def load(self) -> None:
         return None  # 클라우드 API — 받아 둘 모델이 없다
 
-    def transcribe(self, wav_path: str, initial_prompt: str = "") -> list[ASRSegment]:
+    def transcribe(
+        self,
+        wav_path: str,
+        initial_prompt: str = "",
+        on_progress: Callable[[float, float], None] | None = None,
+    ) -> list[ASRSegment]:
         import httpx  # 지연 임포트
 
         with Path(wav_path).open("rb") as f:

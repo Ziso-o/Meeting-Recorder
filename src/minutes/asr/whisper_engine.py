@@ -6,6 +6,8 @@ GPU가 있으면 이 엔진을 우선 사용한다. glossary를 initial_prompt�
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from .base import ASRSegment
 
 
@@ -35,16 +37,32 @@ class FasterWhisperEngine:
             )
         return self._model
 
-    def transcribe(self, wav_path: str, initial_prompt: str = "") -> list[ASRSegment]:
+    def transcribe(
+        self,
+        wav_path: str,
+        initial_prompt: str = "",
+        on_progress: Callable[[float, float], None] | None = None,
+    ) -> list[ASRSegment]:
+        """전사. on_progress(처리된_오디오초, 전체_오디오초)로 진행률을 알린다.
+
+        faster-whisper 는 세그먼트를 **생성기로 하나씩** 내놓고 각 세그먼트에
+        오디오 내 타임스탬프가 있다. 이를 소비하면서 알리면 정확한 진행률이 나온다
+        (리스트로 한 번에 삼키면 이 정보가 버려진다).
+        """
         model = self.load()
-        segments, _info = model.transcribe(
+        segments, info = model.transcribe(
             wav_path,
             language=self.language,
             initial_prompt=initial_prompt or None,
             vad_filter=True,
             word_timestamps=False,
         )
-        return [
-            ASRSegment(start=float(s.start), end=float(s.end), text=s.text.strip())
-            for s in segments
-        ]
+        total = float(getattr(info, "duration", 0.0) or 0.0)
+        out: list[ASRSegment] = []
+        for s in segments:
+            out.append(ASRSegment(start=float(s.start), end=float(s.end), text=s.text.strip()))
+            if on_progress:
+                on_progress(float(s.end), total)
+        if on_progress and total:
+            on_progress(total, total)  # 끝의 무음 구간까지 포함해 100%로 마감
+        return out

@@ -9,6 +9,13 @@ from __future__ import annotations
 from ..schema import Segment
 from .base import ASRSegment, SpeakerTurn
 
+# 연속 병합의 상한. 화자분리가 꺼져 있으면 모든 세그먼트가 같은 화자라
+# 상한이 없으면 **회의 전체가 세그먼트 1개로 뭉친다** — 타임스탬프도, 청크 분할도
+# 무의미해지고 LLM에는 통짜 프롬프트가 날아간다.
+MAX_MERGE_CHARS = 800    # 한 발화 단위의 최대 길이
+MAX_MERGE_SEC = 60.0     # 한 발화 단위의 최대 구간
+MAX_MERGE_GAP = 2.0      # 이만큼 쉬면 다른 발화로 본다
+
 
 def _overlap(a_start: float, a_end: float, b_start: float, b_end: float) -> float:
     return max(0.0, min(a_end, b_end) - max(a_start, b_start))
@@ -57,7 +64,13 @@ def merge_segments(
     merged: list[Segment] = [labeled[0].model_copy()]
     for seg in labeled[1:]:
         prev = merged[-1]
-        if seg.speaker == prev.speaker:
+        joinable = (
+            seg.speaker == prev.speaker
+            and seg.start - prev.end <= MAX_MERGE_GAP
+            and len(prev.text) + len(seg.text) + 1 <= MAX_MERGE_CHARS
+            and seg.end - prev.start <= MAX_MERGE_SEC
+        )
+        if joinable:
             prev.text = f"{prev.text} {seg.text}".strip()
             prev.end = seg.end
         else:

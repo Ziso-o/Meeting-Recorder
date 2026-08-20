@@ -46,7 +46,7 @@ bash scripts/run_local.sh --setup-only   # uv 없어도 python -m venv 폴백
 # ── 수동 설치 ───────────────────────────────────────────────
 uv venv && uv pip install -e ".[transcribe]"    # uv 없으면 python -m venv .venv 후
 #   .venv/Scripts/python -m pip install -e ".[transcribe]"   (Windows / Linux는 .venv/bin/python)
-.venv/Scripts/python -m pytest -q               # 115 passed 확인
+.venv/Scripts/python -m pytest -q               # 129 passed 확인
 ```
 
 > `[transcribe]` = torch/faster-whisper/pyannote(**파일 전사**용, 무거움). Vexa 봇만이면 `[dev]`로 충분.
@@ -145,6 +145,21 @@ git pull origin main
 > `HF_TOKEN`을 채우면 다운로드 속도 제한이 풀리고 **화자분리도 켜집니다.**
 > 토큰이 없으면 `diarizer=off`로 떨어져 **회의록의 화자가 전원 1명으로 나옵니다.**
 
+**진행률은 실제 수치입니다.** 전사는 오디오 타임라인 기준(`42% · 8:16 / 19:40`),
+모델 다운로드는 받은 용량 기준, 회의록은 청크 기준으로 표시되고,
+**실측 처리 속도로 남은 시간**을 같이 보여줍니다.
+
+회의록(LLM) 단계도 CPU에서는 느립니다. `.env`에서:
+
+```bash
+OLLAMA_MODEL=qwen2.5:7b     # CPU면 14b는 비현실적 (3b도 고려)
+LLM_TERM_CORRECTION=0       # 용어 교정 단계를 꺼서 LLM 작업량을 절반으로
+OLLAMA_TIMEOUT=1800         # 기다릴 수 있으면 늘리기
+```
+
+> **전사는 회의록보다 먼저 저장됩니다.** LLM이 실패해도 `.transcript.json`은 남으니
+> 오래 걸린 전사를 다시 할 필요가 없습니다 — 목록의 `▶` 버튼으로 회의록만 다시 만드세요.
+
 > **전사 JSON·회의록 MD 업로드(`🎙`/`📄` 탭)는 별개**다. 이쪽은 요청 본문을 통째로 메모리에
 > 올리는 JSON 경로라 상한이 5MB(`MINUTES_MAX_TEXT_UPLOAD_MB`)로 따로 잡혀 있다.
 
@@ -193,7 +208,7 @@ curl -X POST http://localhost:5678/webhook/bot-dispatch -H "Content-Type: applic
 ## 6. 개발 / 구조 / 문서
 
 ```bash
-python -m pytest -q                     # 115개 (mock으로 네트워크·GPU·오디오 없이 e2e)
+python -m pytest -q                     # 129개 (mock으로 네트워크·GPU·오디오 없이 e2e)
 python -m ruff check src tests scripts  # 린트
 ```
 > `prompts/*.md`와 `glossary.yaml`은 **실제 회의 결과를 보며 사람이 직접 튜닝**한다 — 이게 진짜 IP.

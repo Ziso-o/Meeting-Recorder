@@ -12,6 +12,39 @@ DEFAULT_WINDOW_SEC = 1800.0  # 30분
 DEFAULT_MAX_CHARS = 6000
 
 
+def _split_oversized(segments: list[Segment], max_chars: int) -> list[Segment]:
+    """세그먼트 하나가 상한보다 길면 그 안에서도 쪼갠다.
+
+    청크 분할은 세그먼트 **사이**에서만 일어나므로, 거대한 세그먼트가 하나 들어오면
+    (화자분리 없이 통째로 병합된 경우 등) 분할이 통째로 무력화된다. 여기서 막는다.
+    """
+    out: list[Segment] = []
+    for seg in segments:
+        if len(seg.text) <= max_chars:
+            out.append(seg)
+            continue
+        words = seg.text.split()
+        pieces: list[str] = []
+        buf = ""
+        for w in words:
+            if buf and len(buf) + 1 + len(w) > max_chars:
+                pieces.append(buf)
+                buf = w
+            else:
+                buf = f"{buf} {w}".strip()
+        if buf:
+            pieces.append(buf)
+        # 시간은 글자 수 비율로 나눠 준다(근사 — 순서와 총 구간은 보존).
+        span = max(0.0, seg.end - seg.start)
+        total = sum(len(x) for x in pieces) or 1
+        t = seg.start
+        for piece in pieces:
+            dt = span * (len(piece) / total)
+            out.append(Segment(speaker=seg.speaker, start=t, end=t + dt, text=piece))
+            t += dt
+    return out
+
+
 def chunk_segments(
     segments: list[Segment],
     window_sec: float = DEFAULT_WINDOW_SEC,
@@ -26,7 +59,7 @@ def chunk_segments(
     chunk_start = segments[0].start
     char_count = 0
 
-    for seg in segments:
+    for seg in _split_oversized(segments, max_chars):
         over_time = current and (seg.end - chunk_start) > window_sec
         over_chars = current and (char_count + len(seg.text)) > max_chars
         if over_time or over_chars:

@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import json
+import os
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +20,13 @@ from .providers.base import LLMProvider
 from .schema import MINUTES_JSON_HINT, Minutes, Segment
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
+
+#: on_progress(stage, done, total) — stage: terms | summary | integrate
+Progress = Callable[[str, int, int], None]
+
+
+def _noop(stage: str, done: int, total: int) -> None:
+    return None
 
 
 def _load_prompt(name: str) -> str:
@@ -55,44 +64,79 @@ def _extract_json(text: str) -> Any:
 
 
 # ---- 단계 1: 용어 교정 ----
-def correct_terms(
-    segments: list[Segment], glossary_text: str, provider: LLMProvider
+def term_correction_enabled() -> bool:
+    """LLM_TERM_CORRECTION=0 이면 건너뛴다.
+
+    이 단계는 LLM에게 전사 전문을 **그대로 다시 출력**하게 하므로 가장 비싸다
+    (출력 길이 ≈ 입력 길이). CPU 로컬 LLM에서는 이 한 단계가 전체 시간을 배로 늘린다.
+    용어 교정 없이도 회의록은 나오므로 끌 수 있게 둔다.
+    """
+    return os.environ.get("LLM_TERM_CORRECTION", "1").lower() not in ("0", "false", "off", "no")
+
+
+def _correct_chunk(
+    chunk: list[Segment], glossary_text: str, provider: LLMProvider
 ) -> list[Segment]:
-    seg_json = json.dumps(
-        [{"speaker": s.speaker, "text": s.text} for s in segments],
-        ensure_ascii=False,
-    )
+    """청크 하나를 교정. 실패하면 원문 그대로 — 여기서 예외를 올리지 않는다."""
     prompt = _fill(
         _load_prompt("01_term_correction.md"),
         GLOSSARY=glossary_text,
-        SEGMENTS_JSON=seg_json,
+        SEGMENTS_JSON=json.dumps(
+            [{"speaker": s.speaker, "text": s.text} for s in chunk], ensure_ascii=False
+        ),
     )
     try:
         corrected = _extract_json(provider.generate(prompt))
-        if isinstance(corrected, list) and len(corrected) == len(segments):
+        if isinstance(corrected, list) and len(corrected) == len(chunk):
             return [
                 seg.model_copy(update={"text": str(new_text)})
-                for seg, new_text in zip(segments, corrected)
+                for seg, new_text in zip(chunk, corrected)
             ]
-    except (json.JSONDecodeError, KeyError, TypeError):
-        pass
-    # 실패는 치명적이지 않다 — 원문 유지(복구 가능 오류).
-    return segments
+    except Exception as e:  # noqa: BLE001  타임아웃·연결오류 포함 — 비치명 단계다
+        print(f"  용어 교정 건너뜀(원문 유지): {type(e).__name__}: {e}")
+    return chunk
+
+
+def correct_terms(
+    segments: list[Segment],
+    glossary_text: str,
+    provider: LLMProvider,
+    on_progress: Progress = _noop,
+) -> list[Segment]:
+    """용어 교정 — **청크 단위**로 나눠 호출한다.
+
+    전사 전체를 한 프롬프트에 넣으면 긴 회의에서 반드시 타임아웃이 난다.
+    """
+    if not term_correction_enabled():
+        on_progress("terms", 1, 1)
+        return segments
+
+    chunks = chunk_segments(segments)
+    out: list[Segment] = []
+    for i, chunk in enumerate(chunks, 1):
+        out.extend(_correct_chunk(chunk, glossary_text, provider))
+        on_progress("terms", i, len(chunks))
+    return out
 
 
 # ---- 단계 2: 청크 요약 ----
 def summarize_chunks(
-    segments: list[Segment], glossary_text: str, provider: LLMProvider
+    segments: list[Segment],
+    glossary_text: str,
+    provider: LLMProvider,
+    on_progress: Progress = _noop,
 ) -> list[str]:
     template = _load_prompt("02_chunk_summary.md")
+    chunks = chunk_segments(segments)
     summaries: list[str] = []
-    for chunk in chunk_segments(segments):
+    for i, chunk in enumerate(chunks, 1):
         prompt = _fill(
             template,
             GLOSSARY=glossary_text,
             CHUNK_TEXT=render_segments(chunk),
         )
         summaries.append(provider.generate(prompt).strip())
+        on_progress("summary", i, len(chunks))
     return summaries
 
 
@@ -139,13 +183,16 @@ def generate_minutes(
     provider: LLMProvider,
     glossary: dict[str, Any] | None = None,
     meta: dict[str, Any] | None = None,
+    on_progress: Progress = _noop,
 ) -> Minutes:
     glossary_text = glossary_to_prompt(glossary or {})
     meta = meta or {}
 
-    corrected = correct_terms(segments, glossary_text, provider)
-    summaries = summarize_chunks(corrected, glossary_text, provider)
+    corrected = correct_terms(segments, glossary_text, provider, on_progress)
+    summaries = summarize_chunks(corrected, glossary_text, provider, on_progress)
+    on_progress("integrate", 0, 1)
     minutes = integrate(summaries, meta, glossary_text, provider)
+    on_progress("integrate", 1, 1)
 
     # 메타데이터로 비어있는 상위 필드 보완(LLM이 놓친 경우).
     if not minutes.meeting_title and meta.get("meeting_title"):

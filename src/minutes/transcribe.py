@@ -33,6 +33,7 @@ def transcribe_audio(
     glossary_path: str | Path = "glossary.yaml",
     keep_wav: bool = False,
     on_phase: Callable[[str, dict], None] | None = None,
+    on_progress: Callable[[float, float], None] | None = None,
 ) -> list[Segment]:
     """오디오 → 화자 라벨 세그먼트(Phase 1 입력 스키마). 파이프라인/CLI 공용.
 
@@ -42,6 +43,8 @@ def transcribe_audio(
       "모델 받는 중"과 "전사 중"을 구분해 보여주기 위한 것.
       key = start | convert | model | asr | diarize | merge
       info = 그 단계에서 알게 된 사실(engine/device/model/duration 등)
+
+    on_progress(처리된_오디오초, 전체_오디오초): 전사 진행률(엔진이 지원할 때).
     """
     audio = Path(audio)
     glossary = load_glossary(glossary_path)
@@ -83,7 +86,9 @@ def transcribe_audio(
         engine.load()
 
         phase("asr")
-        asr_segments = engine.transcribe(wav, initial_prompt=initial_prompt)
+        asr_segments = engine.transcribe(
+            wav, initial_prompt=initial_prompt, on_progress=on_progress
+        )
 
         phase("diarize")
         turns = diarizer.diarize(wav) if diarizer else []

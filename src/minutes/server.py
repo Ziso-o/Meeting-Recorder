@@ -117,7 +117,8 @@ def _default_stem(profile: str, meeting: str) -> str:
     return str(Path(home) / "data" / "out" / profile / f"vexa_{safe}")
 
 
-def _write(stem: str, meta: dict, segments: list, minutes) -> None:
+def _write_transcript(stem: str, meta: dict, segments: list) -> None:
+    """전사만 먼저 저장한다(LLM 실패 시에도 남기기 위해)."""
     p = Path(stem)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.with_suffix(".transcript.json").write_text(
@@ -128,6 +129,11 @@ def _write(stem: str, meta: dict, segments: list, minutes) -> None:
         ),
         encoding="utf-8",
     )
+
+
+def _write(stem: str, meta: dict, segments: list, minutes) -> None:
+    p = Path(stem)
+    _write_transcript(stem, meta, segments)
     p.with_suffix(".minutes.json").write_text(
         json.dumps(minutes.model_dump(), ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -401,6 +407,7 @@ def _job_add(audio: Path, profile: str, title: str) -> str:
             "phase": "", "phase_since": now, "engine": "", "device": "",
             "diarizer": "", "duration": 0.0, "eta_lo": 0.0, "eta_hi": 0.0,
             "dl_mb": 0.0, "dl_total_mb": 0,
+            "prog": 0.0, "prog_label": "", "remain": 0.0,
         }
         if len(_JOBS) > _JOBS_KEEP:  # 끝난 것부터 오래된 순으로 정리
             done = [(j["since"], k) for k, j in _JOBS.items()
@@ -408,6 +415,11 @@ def _job_add(audio: Path, profile: str, title: str) -> str:
             for _, k in sorted(done)[: len(_JOBS) - _JOBS_KEEP]:
                 _JOBS.pop(k, None)
     return job_id
+
+
+def _mmss(sec: float) -> str:
+    m, ss = divmod(int(max(0, sec)), 60)
+    return f"{m}:{ss:02d}"
 
 
 def _model_total_mb(model_size: str) -> int:
@@ -453,6 +465,20 @@ def run_audio_job(job_id: str, glossary_path: str = "glossary.yaml") -> dict:
     profile = job["profile"]
     dl_stop = threading.Event()
     facts: dict = {}
+    asr_started = [0.0]
+
+    def on_progress(done_sec: float, total_sec: float) -> None:
+        """전사 진행률 — 오디오 타임라인 기준이라 정확하다.
+
+        남은 시간은 **실측 처리 속도**로 낸다(사전 추정 범위보다 훨씬 정확).
+        """
+        if total_sec <= 0:
+            return
+        ratio = max(0.0, min(1.0, done_sec / total_sec))
+        spent = time.monotonic() - asr_started[0] if asr_started[0] else 0.0
+        remain = (spent / ratio - spent) if (ratio > 0.02 and spent > 0) else 0.0
+        _job_set(job_id, prog=ratio, remain=remain,
+                 prog_label=f"{_mmss(done_sec)} / {_mmss(total_sec)}")
 
     def on_phase(key: str, info: dict) -> None:
         if key == "start":
@@ -474,7 +500,10 @@ def run_audio_job(job_id: str, glossary_path: str = "glossary.yaml") -> dict:
             return
         if key == "asr":
             dl_stop.set()  # 다운로드 감시 종료
-        _job_set(job_id, phase=key, phase_since=time.time(), step=_phase_step(key, facts))
+            asr_started[0] = time.monotonic()
+        # 단계가 바뀌면 이전 단계의 진행률은 지운다(엉뚱한 막대가 남지 않게)
+        _job_set(job_id, phase=key, phase_since=time.time(), step=_phase_step(key, facts),
+                 prog=0.0, prog_label="", remain=0.0)
 
     try:
         if not _RUN_LOCK.acquire(blocking=False):
@@ -483,7 +512,8 @@ def run_audio_job(job_id: str, glossary_path: str = "glossary.yaml") -> dict:
         try:
             _job_set(job_id, status="running", phase="start", phase_since=time.time(),
                      step="준비하는 중")
-            segments = transcribe_audio(audio, glossary_path, on_phase=on_phase)
+            segments = transcribe_audio(audio, glossary_path,
+                                        on_phase=on_phase, on_progress=on_progress)
         finally:
             dl_stop.set()
             _RUN_LOCK.release()
@@ -492,11 +522,28 @@ def run_audio_job(job_id: str, glossary_path: str = "glossary.yaml") -> dict:
                  step="회의록을 쓰는 중 (LLM)", segments=len(segments))
         glossary = load_glossary(glossary_path)
         meta = {"meeting_title": job["title"], "date": "", "source_audio": audio.name}
+        stem = str(_data_dir() / "out" / profile / audio.stem)
+
+        # 전사를 **먼저** 저장한다 — LLM이 실패해도 오래 걸린 전사를 잃지 않고,
+        # 회의록만 따로 다시 만들 수 있다.
+        _write_transcript(stem, meta, segments)
+        _job_set(job_id, transcript=_rel(Path(stem + ".transcript.json")))
+
+        llm_started = time.monotonic()
+
+        def on_llm(stage: str, done: int, total: int) -> None:
+            label = {"terms": "용어 교정", "summary": "구간 요약", "integrate": "통합"}.get(stage, stage)
+            ratio = (done / total) if total else 0.0
+            spent = time.monotonic() - llm_started
+            remain = (spent / ratio - spent) if (ratio > 0.05 and spent > 0) else 0.0
+            _job_set(job_id, prog=ratio, remain=remain,
+                     step=f"회의록을 쓰는 중 · {label}", prog_label=f"{done}/{total}")
+
         minutes = generate_minutes(
-            segments, provider_for_profile(profile), glossary=glossary, meta=meta
+            segments, provider_for_profile(profile), glossary=glossary, meta=meta,
+            on_progress=on_llm,
         )
 
-        stem = str(_data_dir() / "out" / profile / audio.stem)
         _write(stem, meta, segments, minutes)
         res = _result(stem, segments, minutes)
         _job_set(job_id, status="done", phase="done", step="회의록 완료", stem=stem,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel
@@ -34,8 +35,16 @@ class ASREngine(Protocol):
         """
         ...
 
-    def transcribe(self, wav_path: str, initial_prompt: str = "") -> list[ASRSegment]:
-        """16kHz mono wav를 받아 세그먼트 리스트를 반환한다."""
+    def transcribe(
+        self,
+        wav_path: str,
+        initial_prompt: str = "",
+        on_progress: Callable[[float, float], None] | None = None,
+    ) -> list[ASRSegment]:
+        """16kHz mono wav를 받아 세그먼트 리스트를 반환한다.
+
+        on_progress(처리된_오디오초, 전체_오디오초): 지원하는 엔진만 호출한다.
+        """
         ...
 
 
