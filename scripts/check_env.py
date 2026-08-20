@@ -208,11 +208,20 @@ def main() -> int:
                        ("LLM_TERM_CORRECTION", "1"), ("OLLAMA_TIMEOUT", "1800")):
         print(f"  {k:22s} = {os.environ.get(k, default)}"
               f"{'  (기본값)' if k not in os.environ else ''}")
-    print(f"  {'HF_TOKEN':22s} = {'설정됨' if os.environ.get('HF_TOKEN') else '없음 → 화자분리 꺼짐'}")
+    hf = bool(os.environ.get("HF_TOKEN"))
+    print(f"  {'HF_TOKEN':22s} = {'설정됨' if hf else '없음 → 화자분리 꺼짐'}")
+    if hf and os.environ.get("DIARIZER", "auto").lower() not in ("off", "none"):
+        print(f"  {WARN} 화자분리(pyannote)가 켜집니다 — CPU에서는 전사가 끝난 뒤")
+        print("      녹음 길이의 0.2~0.5배가 더 걸립니다(30분 회의 → +6~15분).")
+        print("      속도부터 확인하려면 DIARIZER=off 로 두고 나중에 켜세요.")
 
     # ------------------------------------------------------------ 권장
     head("권장 설정")
-    threads = cpu["physical"] or max(1, (cpu["logical"] or 2) // 2)
+    # CTranslate2 는 스레드가 늘수록 동기화 비용이 커져 8 근처에서 평평해진다.
+    # 특히 12세대+ 인텔은 P코어/E코어가 섞여 있어(예: i7-1360P = P4 + E8)
+    # 물리 코어를 전부 물리면 느린 E코어에 발이 묶인다.
+    physical = cpu["physical"] or max(1, (cpu["logical"] or 2) // 2)
+    threads = min(physical, 8)
     if cuda_usable:
         print("  GPU를 쓸 수 있습니다 — 품질을 포기할 이유가 없어요.")
         rec = {"WHISPER_MODEL": "large-v3", "WHISPER_BEAM_SIZE": "5",
@@ -227,7 +236,11 @@ def main() -> int:
         rec = {"WHISPER_MODEL": "deepdml/faster-whisper-large-v3-turbo-ct2",
                "WHISPER_BEAM_SIZE": "1", "WHISPER_BATCH_SIZE": "8",
                "WHISPER_CPU_THREADS": str(threads),
+               "WHISPER_COMPUTE_TYPE": "int8",
                "OLLAMA_MODEL": "qwen2.5:7b", "LLM_TERM_CORRECTION": "0"}
+        if physical > threads:
+            print(f"  ※ 물리 코어는 {physical}개지만 스레드는 {threads}로 잡습니다"
+                  " — 더 늘려도 빨라지지 않고, 느린 코어에 발이 묶일 수 있어요.")
         print("  예상: 30분 회의 → 전사 8~20분 (지금 대비 3~5배 개선)")
         print("  ※ turbo 줄이 ✗ 면 WHISPER_MODEL=medium 을 쓰세요.")
     print("\n  .env 에 넣을 값:")
