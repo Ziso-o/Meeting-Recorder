@@ -210,3 +210,66 @@ def test_dashboard_renders_progress_details():
     assert "progBar" in html and "dl_total_mb" in html    # 진행바(다운로드·전사·회의록 공용)
     assert "남은 시간 약" in html                          # 실측 기반 잔여 시간
     assert "jobWhy" in html and "전사 예상" in html         # 엔진·디바이스·예상 시간
+
+
+# ---- 전사 속도 튜닝 --------------------------------------------------------
+
+def test_beam_size_defaults_by_device(monkeypatch):
+    """CPU 기본은 greedy(1) — 빔 5는 CPU에서 1.5~2배 느리다."""
+    from minutes.asr import whisper_engine as we
+    from minutes.asr.whisper_engine import FasterWhisperEngine
+
+    monkeypatch.setattr(we, "asr_device", lambda: "cpu")
+    assert FasterWhisperEngine().effective_beam_size() == 1
+    monkeypatch.setattr(we, "asr_device", lambda: "cuda")
+    assert FasterWhisperEngine().effective_beam_size() == 5
+    # 명시하면 디바이스와 무관하게 그 값
+    assert FasterWhisperEngine(beam_size=3).effective_beam_size() == 3
+
+
+def test_engine_tunables_come_from_env(monkeypatch):
+    from minutes.asr import select_asr_engine
+
+    monkeypatch.setenv("ASR_ENGINE", "faster-whisper")
+    monkeypatch.setenv("WHISPER_MODEL", "deepdml/faster-whisper-large-v3-turbo-ct2")
+    monkeypatch.setenv("WHISPER_BEAM_SIZE", "2")
+    monkeypatch.setenv("WHISPER_CPU_THREADS", "6")
+    monkeypatch.setenv("WHISPER_BATCH_SIZE", "8")
+    monkeypatch.setenv("WHISPER_COMPUTE_TYPE", "int8")
+
+    e = select_asr_engine()
+    assert e.model_size == "deepdml/faster-whisper-large-v3-turbo-ct2"
+    assert (e.beam_size, e.cpu_threads, e.batch_size) == (2, 6, 8)
+    assert e.compute_type == "int8"
+
+
+def test_bad_env_values_fall_back_to_defaults(monkeypatch):
+    from minutes.asr import select_asr_engine
+
+    monkeypatch.setenv("ASR_ENGINE", "faster-whisper")
+    monkeypatch.setenv("WHISPER_BEAM_SIZE", "빠르게")   # 숫자가 아님
+    monkeypatch.setenv("WHISPER_BATCH_SIZE", "-4")      # 음수
+    e = select_asr_engine()
+    assert e.beam_size == 0 and e.batch_size == 0       # 죽지 않고 기본값
+
+
+def test_full_repo_id_model_is_passed_through():
+    """turbo 처럼 Systran 밖의 모델도 그대로 쓰인다."""
+    from minutes.asr.info import whisper_repo_id
+
+    repo = "deepdml/faster-whisper-large-v3-turbo-ct2"
+    assert whisper_repo_id(repo) == repo
+
+
+def test_check_env_script_runs():
+    """진단 스크립트가 어떤 환경에서도 죽지 않아야 한다(GPU·Ollama 없어도)."""
+    import subprocess
+    import sys
+
+    out = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "check_env.py")],
+        capture_output=True, text=True, timeout=180, check=False,
+    )
+    assert out.returncode == 0, out.stderr[-2000:]
+    for section in ("하드웨어", "전사 런타임", "Whisper 모델", "권장 설정"):
+        assert section in out.stdout

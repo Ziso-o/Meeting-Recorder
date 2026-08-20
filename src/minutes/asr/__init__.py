@@ -61,8 +61,18 @@ def select_asr_engine() -> ASREngine:
     if choice == "faster-whisper":
         from .whisper_engine import FasterWhisperEngine
 
+        def _int(key: str) -> int:
+            try:
+                return max(0, int(os.environ.get(key, "0")))
+            except ValueError:
+                return 0
+
         return FasterWhisperEngine(
             model_size=os.environ.get("WHISPER_MODEL", "large-v3"),
+            compute_type=os.environ.get("WHISPER_COMPUTE_TYPE", "auto"),
+            beam_size=_int("WHISPER_BEAM_SIZE"),      # 0 → CPU는 1, GPU는 5
+            cpu_threads=_int("WHISPER_CPU_THREADS"),  # 0 → CTranslate2 기본
+            batch_size=_int("WHISPER_BATCH_SIZE"),    # 0 → 배치 추론 끔
         )
 
     if choice == "groq":

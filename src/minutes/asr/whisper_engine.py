@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from .base import ASRSegment
+from .info import asr_device
 
 
 class FasterWhisperEngine:
@@ -20,12 +21,25 @@ class FasterWhisperEngine:
         device: str = "auto",
         compute_type: str = "auto",
         language: str = "ko",
+        beam_size: int = 0,
+        cpu_threads: int = 0,
+        batch_size: int = 0,
     ) -> None:
         self.model_size = model_size
         self.device = device
         self.compute_type = compute_type
         self.language = language
+        self.beam_size = beam_size      # 0 = 디바이스에 맞춰 자동
+        self.cpu_threads = cpu_threads  # 0 = CTranslate2 기본(코어 수)
+        self.batch_size = batch_size    # 0 = 배치 추론 끔
         self._model = None
+        self._pipeline = None
+
+    def effective_beam_size(self) -> int:
+        """빔 크기. CPU에서는 greedy(1)가 기본 — 품질 손해는 작고 1.5~2배 빠르다."""
+        if self.beam_size > 0:
+            return self.beam_size
+        return 5 if asr_device() == "cuda" else 1
 
     def load(self):
         """모델 준비 — 캐시에 없으면 여기서 다운로드가 일어난다(large-v3 약 3GB)."""
@@ -33,8 +47,21 @@ class FasterWhisperEngine:
             from faster_whisper import WhisperModel  # 지연 임포트
 
             self._model = WhisperModel(
-                self.model_size, device=self.device, compute_type=self.compute_type
+                self.model_size, device=self.device, compute_type=self.compute_type,
+                cpu_threads=self.cpu_threads,
             )
+            if self.batch_size > 0:
+                # 배치 추론: VAD로 자른 구간을 묶어 한 번에 돌린다(faster-whisper 1.1+).
+                try:
+                    from faster_whisper import BatchedInferencePipeline
+
+                    self._pipeline = BatchedInferencePipeline(model=self._model)
+                except Exception as e:  # noqa: BLE001  구버전 등 — 일반 모드로 계속
+                    print(f"  배치 추론을 쓸 수 없어 일반 모드로 진행합니다: {e}")
+            print(f"  전사 설정: {self.model_size} · {asr_device()} · "
+                  f"beam={self.effective_beam_size()} · "
+                  f"batch={self.batch_size if self._pipeline else 'off'} · "
+                  f"threads={self.cpu_threads or 'auto'}")
         return self._model
 
     def transcribe(
@@ -50,13 +77,19 @@ class FasterWhisperEngine:
         (리스트로 한 번에 삼키면 이 정보가 버려진다).
         """
         model = self.load()
-        segments, info = model.transcribe(
-            wav_path,
-            language=self.language,
-            initial_prompt=initial_prompt or None,
-            vad_filter=True,
-            word_timestamps=False,
-        )
+        opts = {
+            "language": self.language,
+            "initial_prompt": initial_prompt or None,
+            "vad_filter": True,
+            "word_timestamps": False,
+            "beam_size": self.effective_beam_size(),
+        }
+        if self._pipeline is not None:
+            segments, info = self._pipeline.transcribe(
+                wav_path, batch_size=self.batch_size, **opts
+            )
+        else:
+            segments, info = model.transcribe(wav_path, **opts)
         total = float(getattr(info, "duration", 0.0) or 0.0)
         out: list[ASRSegment] = []
         for s in segments:

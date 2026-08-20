@@ -46,7 +46,7 @@ bash scripts/run_local.sh --setup-only   # uv 없어도 python -m venv 폴백
 # ── 수동 설치 ───────────────────────────────────────────────
 uv venv && uv pip install -e ".[transcribe]"    # uv 없으면 python -m venv .venv 후
 #   .venv/Scripts/python -m pip install -e ".[transcribe]"   (Windows / Linux는 .venv/bin/python)
-.venv/Scripts/python -m pytest -q               # 129 passed 확인
+.venv/Scripts/python -m pytest -q               # 134 passed 확인
 ```
 
 > `[transcribe]` = torch/faster-whisper/pyannote(**파일 전사**용, 무거움). Vexa 봇만이면 `[dev]`로 충분.
@@ -149,6 +149,26 @@ git pull origin main
 모델 다운로드는 받은 용량 기준, 회의록은 청크 기준으로 표시되고,
 **실측 처리 속도로 남은 시간**을 같이 보여줍니다.
 
+#### 내 PC에서 뭘로 돌려야 하나 — `scripts/check_env.py`
+
+```bash
+python scripts/check_env.py
+```
+CPU·GPU·RAM, CTranslate2/torch가 실제로 보는 것, 이미 받아 둔 모델, Ollama 상태를 찍고
+**이 PC에 맞는 `.env` 값을 그대로 출력**합니다. 추측 대신 이걸 먼저 돌리세요.
+
+전사 속도 손잡이(전부 `.env`, `0`이면 자동):
+
+| 값 | 효과 |
+|---|---|
+| `WHISPER_MODEL` | **가장 큰 손잡이.** CPU면 `deepdml/faster-whisper-large-v3-turbo-ct2` 또는 `medium` |
+| `WHISPER_BEAM_SIZE` | 비우면 CPU는 greedy(1). CPU에서 빔 5는 1.5~2배 느립니다 |
+| `WHISPER_BATCH_SIZE` | `8` 권장. VAD로 자른 구간을 묶어 처리(faster-whisper 1.1+) |
+| `WHISPER_CPU_THREADS` | 물리 코어 수를 넣으면 대개 가장 빠릅니다 |
+
+> **NVIDIA GPU가 있는데 `CUDA 장치 0개`로 나오면** 그게 최대 병목입니다.
+> CPU→GPU는 10배 이상이라 다른 튜닝을 전부 합친 것보다 큽니다. 진단 스크립트가 설치 명령을 알려줍니다.
+
 회의록(LLM) 단계도 CPU에서는 느립니다. `.env`에서:
 
 ```bash
@@ -208,7 +228,7 @@ curl -X POST http://localhost:5678/webhook/bot-dispatch -H "Content-Type: applic
 ## 6. 개발 / 구조 / 문서
 
 ```bash
-python -m pytest -q                     # 129개 (mock으로 네트워크·GPU·오디오 없이 e2e)
+python -m pytest -q                     # 134개 (mock으로 네트워크·GPU·오디오 없이 e2e)
 python -m ruff check src tests scripts  # 린트
 ```
 > `prompts/*.md`와 `glossary.yaml`은 **실제 회의 결과를 보며 사람이 직접 튜닝**한다 — 이게 진짜 IP.
@@ -223,7 +243,8 @@ src/minutes/
 ├── server.py · _webui.py                # HTTP 서비스 + 웹 대시보드(자동회의록·녹음본업로드·파일관리)
 ├── audio_formats.py                     # 지원 오디오 확장자(업로드 검증·watch 공용)
 └── config.py · glossary.py             # 설정·용어집
-scripts/  start_windows.bat · start_windows_cpu.bat   # 원클릭 실행(GPU/CPU)
+scripts/  check_env.py                              # 환경 진단 + 권장 .env 출력
+          start_windows.bat · start_windows_cpu.bat   # 원클릭 실행(GPU/CPU)
           install_vexa_cpu.bat · install_vexa_cpu.sh  # Vexa 자동 설치(키까지 .env 기입)
 prompts/ · glossary.yaml · workflows/ · docs/ · docker/
 ```

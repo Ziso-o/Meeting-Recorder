@@ -199,6 +199,19 @@ Meeting-Recorder/
   회의록은 청크 n/N. 남은 시간은 **실측 처리속도**로 계산(사전 추정 범위는 실측이 생기면 물러남).
 - pytest 129개.
 
+### 전사 속도 튜닝 + 환경 진단 (2026-08)
+- **실측**: 28분 회의가 CPU large-v3에서 0.42배속(≈57분 예상). 실사용 불가 수준.
+- `scripts/check_env.py`: CPU/GPU/RAM · ct2 CUDA 개수 · CPU 지원 연산 · 후보 모델의
+  **실제 접근 가능 여부(HfApi로 확인 — 레포명 추측 금지)** · 캐시 여부 · Ollama 모델 목록 ·
+  현재 .env → **권장 .env 값 출력**. 표준 라이브러리만, 무엇이 없어도 안 죽는다.
+- 엔진 손잡이(전부 env, 0=자동): `WHISPER_BEAM_SIZE`(비우면 **CPU=1 greedy**, GPU=5) ·
+  `WHISPER_BATCH_SIZE`(BatchedInferencePipeline) · `WHISPER_CPU_THREADS` · `WHISPER_COMPUTE_TYPE`.
+- 확인된 사실: faster-whisper 1.2.1 배치추론 지원 / ct2 4.8.1 CPU 연산 = int8·int8_float32·
+  int16·float32 (`compute_type=auto`면 int8 선택) / `beam_size` 기본이 5라 CPU에서 손해.
+- 우선순위: **GPU 켜기(10배+) > 모델 교체(3~5배) > beam=1(1.5~2배) > 배치 > 스레드**.
+  distil-whisper는 영어 전용이라 한국어 회의에 못 씀 — turbo 계열을 쓸 것.
+- pytest 134개.
+
 ### 브랜치 단일화 (2026-08, 완료)
 - **이제 브랜치는 `main` 하나뿐이다.** 기본 브랜치도 `main`.
 - `main`을 작업 계보(`claude/clova-note-recording-support-1kna7y`, 51커밋)로 강제 갱신하고
