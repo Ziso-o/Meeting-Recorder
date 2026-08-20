@@ -212,6 +212,20 @@ Meeting-Recorder/
   distil-whisper는 영어 전용이라 한국어 회의에 못 씀 — turbo 계열을 쓸 것.
 - pytest 134개.
 
+### 회의록 문체 = 개조식 + 단계별 소요시간 (2026-08)
+- 사용자 요구: **개조식**(명사형 종결 `~함/~됨/~필요`) · **문장 끝 마침표 없음**.
+- 2겹으로 강제: ① `prompts/03`에 '문체 — 개조식(엄수)' 섹션(금지/권장 대조표 + discussion 예시),
+  `prompts/02`도 같은 문체로, `MINUTES_JSON_HINT` 예시 자체를 개조식으로(LLM은 형식 예시를
+  문체 예시로도 읽는다). ② `style.py`가 코드로 마침표 제거 — 로컬 7b가 지시를 흘려도 구두점은 보장.
+- `style.py` 규칙: 마침표 **앞**이 한글/영문/닫는괄호일 때만 처리 → `1.5억`·`v3.1`·`2026-08-20` 보존.
+  문장 **사이**는 줄바꿈으로(그냥 지우면 두 문장이 붙음), 줄 **끝**은 제거.
+  적용은 pydantic `Brief` 애노테이션(`Annotated[str, AfterValidator]`) — `Segment.text`(전사 원문)와
+  `owner`/`due_date`/`attendees`는 **제외**. `MINUTES_STRIP_PERIODS=0`으로 끌 수 있음.
+- job에 `timings{phase: sec}` 적립 → 완료 후 "전사 18분 · 회의록 5분" 표시. 다음 최적화 지점 판단용.
+  단계 전환 시 진행률 초기화(끝난 작업에 낡은 막대가 남지 않게).
+- 실측: i7-1360P CPU에서 28분 회의 = 23분(turbo+beam1+batch8). 이전 large-v3 대비 2.9배.
+- pytest 148개.
+
 ### 브랜치 단일화 (2026-08, 완료)
 - **이제 브랜치는 `main` 하나뿐이다.** 기본 브랜치도 `main`.
 - `main`을 작업 계보(`claude/clova-note-recording-support-1kna7y`, 51커밋)로 강제 갱신하고

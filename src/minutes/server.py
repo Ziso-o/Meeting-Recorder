@@ -388,6 +388,25 @@ _JOBS_KEEP = 50  # 오래된 작업 기록은 이 개수만 남긴다
 _RUN_LOCK = threading.Lock()
 
 
+def _job_phase(job_id: str, phase: str, step: str) -> None:
+    """단계 전환 — 직전 단계가 얼마나 걸렸는지 적립한다.
+
+    끝난 뒤 "전사 18분 · 회의록 5분"처럼 보여줘야 다음에 무엇을 손볼지 알 수 있다.
+    """
+    now = time.time()
+    with _JLOCK:
+        job = _JOBS.get(job_id)
+        if job is None:
+            return
+        prev = job.get("phase")
+        if prev:
+            job["timings"][prev] = job["timings"].get(prev, 0.0) + (
+                now - job.get("phase_since", now)
+            )
+        job.update(phase=phase, phase_since=now, step=step,
+                   prog=0.0, prog_label="", remain=0.0)
+
+
 def _job_set(job_id: str, **fields: Any) -> None:
     with _JLOCK:
         job = _JOBS.get(job_id)
@@ -407,7 +426,7 @@ def _job_add(audio: Path, profile: str, title: str) -> str:
             "phase": "", "phase_since": now, "engine": "", "device": "",
             "diarizer": "", "duration": 0.0, "eta_lo": 0.0, "eta_hi": 0.0,
             "dl_mb": 0.0, "dl_total_mb": 0,
-            "prog": 0.0, "prog_label": "", "remain": 0.0,
+            "prog": 0.0, "prog_label": "", "remain": 0.0, "timings": {},
         }
         if len(_JOBS) > _JOBS_KEEP:  # 끝난 것부터 오래된 순으로 정리
             done = [(j["since"], k) for k, j in _JOBS.items()
@@ -493,8 +512,8 @@ def run_audio_job(job_id: str, glossary_path: str = "glossary.yaml") -> dict:
             return
         if key == "model" and not facts.get("cached", True):
             total = _model_total_mb(str(facts.get("model") or ""))
-            _job_set(job_id, phase=key, phase_since=time.time(),
-                     step=f"모델 받는 중 · 약 {total:,}MB (처음 한 번만)", dl_total_mb=total)
+            _job_phase(job_id, key, f"모델 받는 중 · 약 {total:,}MB (처음 한 번만)")
+            _job_set(job_id, dl_total_mb=total)
             threading.Thread(target=_watch_download, daemon=True,
                              args=(job_id, facts.get("repo_id", ""), total, dl_stop)).start()
             return
@@ -502,8 +521,7 @@ def run_audio_job(job_id: str, glossary_path: str = "glossary.yaml") -> dict:
             dl_stop.set()  # 다운로드 감시 종료
             asr_started[0] = time.monotonic()
         # 단계가 바뀌면 이전 단계의 진행률은 지운다(엉뚱한 막대가 남지 않게)
-        _job_set(job_id, phase=key, phase_since=time.time(), step=_phase_step(key, facts),
-                 prog=0.0, prog_label="", remain=0.0)
+        _job_phase(job_id, key, _phase_step(key, facts))
 
     try:
         if not _RUN_LOCK.acquire(blocking=False):
@@ -518,8 +536,8 @@ def run_audio_job(job_id: str, glossary_path: str = "glossary.yaml") -> dict:
             dl_stop.set()
             _RUN_LOCK.release()
 
-        _job_set(job_id, phase="llm", phase_since=time.time(),
-                 step="회의록을 쓰는 중 (LLM)", segments=len(segments))
+        _job_phase(job_id, "llm", "회의록을 쓰는 중 (LLM)")
+        _job_set(job_id, segments=len(segments))
         glossary = load_glossary(glossary_path)
         meta = {"meeting_title": job["title"], "date": "", "source_audio": audio.name}
         stem = str(_data_dir() / "out" / profile / audio.stem)
@@ -546,7 +564,8 @@ def run_audio_job(job_id: str, glossary_path: str = "glossary.yaml") -> dict:
 
         _write(stem, meta, segments, minutes)
         res = _result(stem, segments, minutes)
-        _job_set(job_id, status="done", phase="done", step="회의록 완료", stem=stem,
+        _job_phase(job_id, "done", "회의록 완료")
+        _job_set(job_id, status="done", stem=stem,
                  minutes_path=_rel(Path(stem + ".minutes.md")))
         return res
     except Exception as e:  # noqa: BLE001  실패도 값으로 남겨 대시보드가 이유를 보여준다

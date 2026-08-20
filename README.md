@@ -46,7 +46,7 @@ bash scripts/run_local.sh --setup-only   # uv 없어도 python -m venv 폴백
 # ── 수동 설치 ───────────────────────────────────────────────
 uv venv && uv pip install -e ".[transcribe]"    # uv 없으면 python -m venv .venv 후
 #   .venv/Scripts/python -m pip install -e ".[transcribe]"   (Windows / Linux는 .venv/bin/python)
-.venv/Scripts/python -m pytest -q               # 134 passed 확인
+.venv/Scripts/python -m pytest -q               # 148 passed 확인
 ```
 
 > `[transcribe]` = torch/faster-whisper/pyannote(**파일 전사**용, 무거움). Vexa 봇만이면 `[dev]`로 충분.
@@ -240,10 +240,27 @@ curl -X POST http://localhost:5678/webhook/bot-dispatch -H "Content-Type: applic
 ## 6. 개발 / 구조 / 문서
 
 ```bash
-python -m pytest -q                     # 134개 (mock으로 네트워크·GPU·오디오 없이 e2e)
+python -m pytest -q                     # 148개 (mock으로 네트워크·GPU·오디오 없이 e2e)
 python -m ruff check src tests scripts  # 린트
 ```
 > `prompts/*.md`와 `glossary.yaml`은 **실제 회의 결과를 보며 사람이 직접 튜닝**한다 — 이게 진짜 IP.
+
+### 회의록 문체 — 개조식
+
+회의록은 **개조식(명사형 종결 · 마침표 없음)**으로 나온다. 공공기관 보고서 문체다.
+
+```
+논의 내용
+### AIOT 사업자료 작성
+기현 수석·전략계획실 협업으로 진행함
+TTA 협업을 위해 8월 초까지 준비 필요
+실증 구역은 부산시 전체를 포함하여 작성함
+```
+
+- 어체는 `prompts/03_integrate_minutes.md`의 **문체 섹션**이 만든다 — 바꾸려면 여기를 고친다.
+- 마침표 제거는 `style.py`가 **코드로 한 번 더 보장**한다(로컬 소형 LLM이 지시를 흘려도
+  구두점만은 어긋나지 않게). 소수점·버전·날짜의 점(`1.5억`, `v3.1`, `2026-08-20`)은 건드리지 않는다.
+- 서술체로 되돌리려면 프롬프트를 고치고 `MINUTES_STRIP_PERIODS=0`.
 
 ```
 src/minutes/

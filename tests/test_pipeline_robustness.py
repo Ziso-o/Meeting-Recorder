@@ -181,14 +181,18 @@ def test_transcript_survives_llm_failure(home, monkeypatch):
     assert job["status"] == "failed" and job["transcript"].endswith(".transcript.json")
 
 
-def test_job_gets_real_transcription_progress(home):
-    """mock 엔진도 실제 엔진과 같은 방식으로 진행률을 알린다 → job 에 반영."""
+def test_job_records_phase_timings(home):
+    """끝난 뒤 어느 단계에서 시간이 갔는지 남아야 다음에 뭘 손볼지 알 수 있다."""
     audio = server.save_audio_stream("진행률.m4a", io.BytesIO(b"x"), 1)
     job_id = server._job_add(audio, "secure", "")
     server.run_audio_job(job_id, glossary_path=str(ROOT / "glossary.yaml"))
     job = next(j for j in server.ep_jobs({})["jobs"] if j["id"] == job_id)
+
     assert job["status"] == "done"
-    assert job["prog"] == pytest.approx(1.0)      # 마지막 단계까지 100%
+    assert {"asr", "llm"} <= set(job["timings"]), job["timings"]
+    assert all(v >= 0 for v in job["timings"].values())
+    # 끝난 작업에 낡은 진행바가 남지 않는다
+    assert job["prog"] == 0.0 and job["prog_label"] == ""
 
 
 def test_progress_callback_fills_label_and_remaining(home, monkeypatch):

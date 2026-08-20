@@ -473,6 +473,12 @@ function progBar(j){const r=jobPct(j); if(r<0)return '';
   '<div class="fmeta" style="margin-top:4px"><b style="color:var(--pri)">'+pct+'%</b>'+
   (j.prog_label?(' <span style="opacity:.8">'+esc(j.prog_label)+'</span>'):'')+
   (j.remain>0?(' · 남은 시간 약 '+fmtDur(j.remain)):'')+'</div>';}
+/* 끝난 뒤: 어느 단계에서 시간이 갔는지 — 다음에 뭘 손볼지 알려면 필요 */
+const PHASE_LABEL={convert:'변환',model:'모델 받기',asr:'전사',diarize:'화자분리',llm:'회의록'};
+function jobTimings(j){const t=j.timings||{};
+ const parts=Object.keys(PHASE_LABEL).filter(k=>t[k]>=1)
+  .map(k=>PHASE_LABEL[k]+' '+fmtDur(t[k]));
+ return parts.length?'<div class="fmeta" style="margin-top:3px">'+parts.join(' · ')+'</div>':'';}
 /* 왜 오래 걸리는지 한 줄로 — 엔진·디바이스·녹음 길이·예상 시간 */
 function jobWhy(j){const bits=[];
  if(j.engine)bits.push(esc(j.engine));
@@ -494,7 +500,7 @@ async function loadJobs(){let d; try{d=await jget('/api/jobs');}catch(e){return;
     '<div class="fmeta" style="color:'+st[1]+'">'+esc(j.step||st[0])+
      (run&&j.phase_elapsed?(' · '+fmtDur(j.phase_elapsed)+'째'):'')+
      (j.segments?(' · 세그먼트 '+j.segments):'')+(j.error?(' — '+esc(j.error)):'')+'</div>'+
-    jobWhy(j)+progBar(j)+
+    jobWhy(j)+progBar(j)+(j.status==='done'?jobTimings(j):'')+
     (j.elapsed?('<div class="fmeta" style="margin-top:3px;opacity:.75">전체 '+fmtDur(j.elapsed)+' 경과</div>'):'')+
     '</div>'+
     (j.status==='done'?'<button class="btn pri sm" onclick="go(\'minutes\')">회의록 보기</button>':'')+
