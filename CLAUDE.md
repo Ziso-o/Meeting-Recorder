@@ -275,6 +275,19 @@ Meeting-Recorder/
 - 잘림 경고 문구를 '모델이 요약하지 않고 늘어놓는 중일 수 있음'으로 바꿔 원인을 가리키게 함.
 - pytest 166개.
 
+### 집 GPU PC — CUDA DLL 자동 등록 (2026-08)
+- GPU 인식됨(`· CUDA ·`, 28분 회의 **전사 예상 1분 25초~4분 16초**). 실패 원인은
+  `Library cublas64_12.dll is not found or cannot be loaded` 하나뿐이었다.
+- CTranslate2는 CUDA 12용 cublas/cudnn DLL을 요구하는데, pip 로 깐 `nvidia-*` 패키지나
+  torch 번들 DLL은 **PATH에 없다**. 사용자가 PATH를 손대게 하는 대신
+  `info.register_cuda_dlls()`가 site-packages의 `nvidia/{cublas,cudnn,cuda_runtime}/bin`·
+  `torch/lib`을 찾아 `os.add_dll_directory()`로 등록한다(Windows 전용, 없으면 no-op).
+- 그래도 실패하면 `_is_cuda_library_error()`로 판별해 **설치 명령을 붙인 오류**를 낸다.
+- `WHISPER_DEVICE=auto|cuda|cpu` 추가 — GPU가 말썽이면 .env 한 줄로 되돌린다.
+  `asr_device()`도 이 설정을 존중해 대시보드 표시가 어긋나지 않게.
+- `check_env.py`가 Windows에서 CUDA DLL 발견 여부를 보고.
+- pytest 172개.
+
 ### 브랜치 단일화 (2026-08, 완료)
 - **이제 브랜치는 `main` 하나뿐이다.** 기본 브랜치도 `main`.
 - `main`을 작업 계보(`claude/clova-note-recording-support-1kna7y`, 51커밋)로 강제 갱신하고

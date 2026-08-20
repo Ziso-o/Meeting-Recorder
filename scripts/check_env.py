@@ -86,6 +86,11 @@ def gpu_info() -> list[str]:
 
 
 # ---------------------------------------------------------------- 런타임
+def nvidia_hint(gpus: list[str]) -> bool:
+    return any(k in g.lower() for g in gpus
+               for k in ("nvidia", "geforce", "rtx", "quadro", "tesla"))
+
+
 def runtime_info() -> dict:
     r: dict = {}
     try:
@@ -162,8 +167,7 @@ def main() -> int:
     load_dotenv()
 
     cpu, gpus, rt = cpu_info(), gpu_info(), runtime_info()
-    nvidia = [g for g in gpus if "nvidia" in g.lower() or "geforce" in g.lower()
-              or "rtx" in g.lower() or "quadro" in g.lower() or "tesla" in g.lower()]
+    nvidia = [g for g in gpus if nvidia_hint([g])]
     cuda_usable = bool(rt.get("cuda_count")) or bool(rt.get("torch_cuda"))
 
     head("하드웨어")
@@ -187,6 +191,18 @@ def main() -> int:
     if "fw" in rt:
         print(f"  {OK} faster-whisper {rt['fw']} · 배치 추론 "
               f"{'지원' if rt['batched'] else '미지원(업그레이드 권장)'}")
+    if platform.system() == "Windows" and (rt.get("cuda_count") or nvidia_hint(gpus)):
+        from minutes.asr.info import cuda_dll_dirs
+
+        dirs = cuda_dll_dirs()
+        if dirs:
+            print(f"  {OK} CUDA DLL 폴더 {len(dirs)}개 발견(자동 등록됨)")
+            for d in dirs:
+                print(f"      {d}")
+        else:
+            print(f"  {NO} CUDA DLL(cublas/cudnn)을 못 찾았습니다 — 전사가 다음 오류로 죽습니다:")
+            print("      Library cublas64_12.dll is not found or cannot be loaded")
+            print("      해결: uv pip install nvidia-cublas-cu12 nvidia-cudnn-cu12")
 
     head("Whisper 모델 (받아졌는지 · 캐시됐는지)")
     for repo, short, note, reachable, cached in model_availability():

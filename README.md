@@ -46,7 +46,7 @@ bash scripts/run_local.sh --setup-only   # uv 없어도 python -m venv 폴백
 # ── 수동 설치 ───────────────────────────────────────────────
 uv venv && uv pip install -e ".[transcribe]"    # uv 없으면 python -m venv .venv 후
 #   .venv/Scripts/python -m pip install -e ".[transcribe]"   (Windows / Linux는 .venv/bin/python)
-.venv/Scripts/python -m pytest -q               # 166 passed 확인
+.venv/Scripts/python -m pytest -q               # 172 passed 확인
 ```
 
 > `[transcribe]` = torch/faster-whisper/pyannote(**파일 전사**용, 무거움). Vexa 봇만이면 `[dev]`로 충분.
@@ -195,6 +195,18 @@ python scripts/bench_llm.py --threads 0,4,8,12
 3. **Ollama 설치 위치** — `where ollama`. WSL 안에만 있으면 Windows 네이티브로 다시 설치하는 편이 빠릅니다
 4. **스레드** — 위 표에서 가장 빠른 값을 `.env` 의 `OLLAMA_NUM_THREAD` 에
 
+#### GPU인데 `cublas64_12.dll is not found` 로 죽을 때
+
+CTranslate2(faster-whisper)가 CUDA 12용 cuBLAS·cuDNN 을 못 찾는 경우입니다.
+**가상환경에 설치만 하면 됩니다 — PATH 는 건드리지 마세요.** 코드가 알아서 찾아 등록합니다.
+
+```bash
+uv pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
+```
+
+`scripts/check_env.py` 가 이 DLL 을 찾았는지 알려줍니다. GPU를 잠시 포기하려면 `.env` 에
+`WHISPER_DEVICE=cpu`.
+
 > **NVIDIA GPU가 있는데 `CUDA 장치 0개`로 나오면** 그게 최대 병목입니다.
 > CPU→GPU는 10배 이상이라 다른 튜닝을 전부 합친 것보다 큽니다. 진단 스크립트가 설치 명령을 알려줍니다.
 
@@ -257,7 +269,7 @@ curl -X POST http://localhost:5678/webhook/bot-dispatch -H "Content-Type: applic
 ## 6. 개발 / 구조 / 문서
 
 ```bash
-python -m pytest -q                     # 166개 (mock으로 네트워크·GPU·오디오 없이 e2e)
+python -m pytest -q                     # 172개 (mock으로 네트워크·GPU·오디오 없이 e2e)
 python -m ruff check src tests scripts  # 린트
 ```
 > `prompts/*.md`와 `glossary.yaml`은 **실제 회의 결과를 보며 사람이 직접 튜닝**한다 — 이게 진짜 IP.

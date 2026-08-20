@@ -65,6 +65,9 @@ def asr_device() -> str:
     faster-whisper 는 torch 가 아니라 CTranslate2 로 도니 그쪽을 먼저 본다.
     둘 다 판단 못 하면 보수적으로 "cpu"(느린 쪽)로 본다 — 예상 시간을 낙관하지 않기 위해.
     """
+    forced = os.environ.get("WHISPER_DEVICE", "auto").lower()
+    if forced in ("cpu", "cuda"):
+        return forced
     for probe in (_cuda_via_ctranslate2, _cuda_via_torch):
         got = probe()
         if got is not None:
@@ -145,3 +148,58 @@ def describe_engine(engine) -> str:
     if name != "faster-whisper":
         return name
     return f"{name} {getattr(engine, 'model_size', '?')} · {asr_device().upper()}"
+
+
+# ---- Windows CUDA DLL 경로 ------------------------------------------------
+#
+# CTranslate2(faster-whisper)는 cublas64_12.dll · cudnn_*.dll 을 필요로 한다.
+# 그런데 pip 로 설치한 `nvidia-*` 패키지나 torch 가 번들한 DLL 은 PATH 에 없어서
+# "Library cublas64_12.dll is not found or cannot be loaded" 로 죽는다.
+# 사용자가 PATH 를 손대게 하는 대신 여기서 찾아 등록한다.
+
+def cuda_dll_dirs() -> list[Path]:
+    """site-packages 안에서 CUDA DLL 이 들어 있는 폴더들을 찾는다."""
+    import site
+
+    bases: list[str] = []
+    try:
+        bases += site.getsitepackages()
+    except AttributeError:  # 일부 가상환경
+        pass
+    try:
+        bases.append(site.getusersitepackages())
+    except AttributeError:
+        pass
+
+    found: list[Path] = []
+    for base in bases:
+        root = Path(base)
+        for rel in (("nvidia", "cublas", "bin"), ("nvidia", "cudnn", "bin"),
+                    ("nvidia", "cuda_runtime", "bin"), ("torch", "lib")):
+            d = root.joinpath(*rel)
+            if d.is_dir() and d not in found:
+                found.append(d)
+    return found
+
+
+def register_cuda_dlls() -> list[Path]:
+    """찾은 DLL 폴더를 이 프로세스에 등록한다(Windows 전용, 반환=등록된 폴더)."""
+    if os.name != "nt":
+        return []
+    registered: list[Path] = []
+    for d in cuda_dll_dirs():
+        try:
+            os.add_dll_directory(str(d))
+            registered.append(d)
+        except OSError:  # 이미 등록됐거나 접근 불가 — 치명적이지 않다
+            continue
+    return registered
+
+
+CUDA_HELP = (
+    "CUDA 라이브러리를 못 찾았습니다. 가상환경에 설치하면 됩니다:\n"
+    "    uv pip install nvidia-cublas-cu12 nvidia-cudnn-cu12\n"
+    "  (또는 CUDA 12 지원 torch: "
+    "uv pip install torch --index-url https://download.pytorch.org/whl/cu124)\n"
+    "  GPU 없이 CPU로 돌리려면 .env 에 WHISPER_DEVICE=cpu"
+)

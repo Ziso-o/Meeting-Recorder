@@ -273,3 +273,64 @@ def test_check_env_script_runs():
     assert out.returncode == 0, out.stderr[-2000:]
     for section in ("하드웨어", "전사 런타임", "Whisper 모델", "권장 설정"):
         assert section in out.stdout
+
+
+# ---- Windows CUDA DLL ------------------------------------------------------
+
+def test_cuda_dll_dirs_finds_packaged_libs(tmp_path, monkeypatch):
+    """pip 로 깐 nvidia-* / torch 안의 DLL 폴더를 찾아낸다."""
+    import site
+
+    for rel in (("nvidia", "cublas", "bin"), ("nvidia", "cudnn", "bin"), ("torch", "lib")):
+        tmp_path.joinpath(*rel).mkdir(parents=True)
+    monkeypatch.setattr(site, "getsitepackages", lambda: [str(tmp_path)])
+    monkeypatch.setattr(site, "getusersitepackages", lambda: str(tmp_path))
+
+    found = info.cuda_dll_dirs()
+    assert len(found) == 3, found          # 중복 경로는 한 번만
+    assert all(p.is_dir() for p in found)
+    assert {p.parent.name for p in found} == {"cublas", "cudnn", "torch"}
+
+
+def test_cuda_dll_dirs_empty_when_nothing_installed(tmp_path, monkeypatch):
+    import site
+
+    monkeypatch.setattr(site, "getsitepackages", lambda: [str(tmp_path)])
+    monkeypatch.setattr(site, "getusersitepackages", lambda: str(tmp_path))
+    assert info.cuda_dll_dirs() == []
+
+
+def test_register_is_noop_off_windows(monkeypatch):
+    """비Windows에서는 조용히 아무것도 하지 않는다(죽으면 안 된다)."""
+    monkeypatch.setattr(info.os, "name", "posix")
+    assert info.register_cuda_dlls() == []
+
+
+def test_cuda_library_error_is_recognised():
+    from minutes.asr.whisper_engine import _is_cuda_library_error
+
+    assert _is_cuda_library_error(
+        RuntimeError("Library cublas64_12.dll is not found or cannot be loaded"))
+    assert _is_cuda_library_error(OSError("cudnn_ops64_9.dll missing"))
+    assert not _is_cuda_library_error(RuntimeError("model file corrupted"))
+
+
+def test_cuda_help_names_the_fix():
+    for token in ("nvidia-cublas-cu12", "nvidia-cudnn-cu12", "WHISPER_DEVICE=cpu"):
+        assert token in info.CUDA_HELP
+
+
+def test_device_can_be_forced(monkeypatch):
+    """GPU가 말썽이면 .env 한 줄로 CPU로 되돌릴 수 있어야 한다."""
+    monkeypatch.setenv("WHISPER_DEVICE", "cpu")
+    assert info.asr_device() == "cpu"
+    monkeypatch.setenv("WHISPER_DEVICE", "cuda")
+    assert info.asr_device() == "cuda"
+    monkeypatch.setenv("WHISPER_DEVICE", "auto")
+    assert info.asr_device() in ("cpu", "cuda")
+
+    monkeypatch.setenv("ASR_ENGINE", "faster-whisper")
+    monkeypatch.setenv("WHISPER_DEVICE", "cpu")
+    from minutes.asr import select_asr_engine
+
+    assert select_asr_engine().device == "cpu"

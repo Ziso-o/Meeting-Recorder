@@ -9,7 +9,13 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from .base import ASRSegment
-from .info import asr_device
+from .info import CUDA_HELP, asr_device, register_cuda_dlls
+
+
+def _is_cuda_library_error(e: Exception) -> bool:
+    """CUDA 라이브러리를 못 찾아 죽은 것인지 — 그때만 설치 안내를 붙인다."""
+    msg = str(e).lower()
+    return any(k in msg for k in ("cublas", "cudnn", "cudart", "cuda"))
 
 
 class FasterWhisperEngine:
@@ -46,10 +52,17 @@ class FasterWhisperEngine:
         if self._model is None:
             from faster_whisper import WhisperModel  # 지연 임포트
 
-            self._model = WhisperModel(
-                self.model_size, device=self.device, compute_type=self.compute_type,
-                cpu_threads=self.cpu_threads,
-            )
+            # pip 로 깔린 CUDA DLL 은 PATH 에 없다 — 여기서 찾아 등록한다.
+            register_cuda_dlls()
+            try:
+                self._model = WhisperModel(
+                    self.model_size, device=self.device, compute_type=self.compute_type,
+                    cpu_threads=self.cpu_threads,
+                )
+            except (RuntimeError, OSError) as e:
+                if not _is_cuda_library_error(e):
+                    raise
+                raise RuntimeError(f"{e}\n\n{CUDA_HELP}") from e
             if self.batch_size > 0:
                 # 배치 추론: VAD로 자른 구간을 묶어 한 번에 돌린다(faster-whisper 1.1+).
                 try:

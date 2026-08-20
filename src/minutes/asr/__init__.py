@@ -69,6 +69,7 @@ def select_asr_engine() -> ASREngine:
 
         return FasterWhisperEngine(
             model_size=os.environ.get("WHISPER_MODEL", "large-v3"),
+            device=os.environ.get("WHISPER_DEVICE", "auto"),   # cuda | cpu | auto
             compute_type=os.environ.get("WHISPER_COMPUTE_TYPE", "auto"),
             beam_size=_int("WHISPER_BEAM_SIZE"),      # 0 → CPU는 1, GPU는 5
             cpu_threads=_int("WHISPER_CPU_THREADS"),  # 0 → CTranslate2 기본
