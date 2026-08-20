@@ -66,7 +66,7 @@ def test_dispatch_zoom_forwards_meeting_url(monkeypatch):
         bot_name = "회의록봇"
 
         def request_bot(self, platform, native_meeting_id, language="ko",
-                        passcode="", meeting_url=""):
+                        passcode="", meeting_url="", bot_name=""):
             captured.update(platform=platform, meeting=native_meeting_id,
                             passcode=passcode, meeting_url=meeting_url)
             return {"status": "requested", "platform": platform,

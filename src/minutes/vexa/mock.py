@@ -13,12 +13,12 @@ class MockVexaClient:
 
     def request_bot(
         self, platform: str, native_meeting_id: str, language: str = "ko",
-        task: str = "transcribe", passcode: str = "", meeting_url: str = "",
+        task: str = "transcribe", passcode: str = "", meeting_url: str = "", bot_name: str = "",
     ) -> dict[str, Any]:
         self.dispatched.append((platform, native_meeting_id))
         return {
             "status": "requested",
-            "bot_name": self.bot_name,
+            "bot_name": bot_name or self.bot_name,
             "platform": platform,
             "native_meeting_id": native_meeting_id,
         }

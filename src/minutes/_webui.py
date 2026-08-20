@@ -172,9 +172,16 @@ INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
      <select class="select" id="joinProfile" style="flex:0 0 140px"><option value="secure">secure · 로컬</option><option value="internal">internal</option></select>
      <button class="btn pri" id="joinBtn" onclick="joinBot()">참석시키기</button>
     </div>
-    <label style="display:flex;align-items:center;gap:7px;margin-top:12px;font-size:13.5px;color:var(--sub);cursor:pointer">
-     <input type="checkbox" id="autoMin" checked> 회의가 끝나면 회의록을 <b style="color:var(--text);margin:0 2px">자동으로</b> 만들어요
-    </label>
+    <div style="display:flex;align-items:center;gap:18px;margin-top:12px;flex-wrap:wrap">
+     <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--sub)">
+      🏷 봇 이름
+      <input class="input" id="botName" placeholder="회의록봇" maxlength="60"
+       style="padding:8px 12px;font-size:14px;width:200px;flex:0 0 auto" title="회의별로 바꿀 수 있어요 (한/영)">
+     </label>
+     <label style="display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--sub);cursor:pointer">
+      <input type="checkbox" id="autoMin" checked> 회의가 끝나면 회의록을 <b style="color:var(--text);margin:0 2px">자동으로</b> 만들어요
+     </label>
+    </div>
     <div class="result" id="joinRes"></div>
    </div>
    <div class="card" id="trackCard" style="display:none">
@@ -254,12 +261,14 @@ function go(v){document.querySelectorAll('.view').forEach(s=>s.classList.toggle(
 
 /* 참석 */
 async function joinBot(){const url=$('url').value.trim(); if(!url)return toast('회의 링크를 넣어 주세요','err');
- const profile=$('joinProfile').value, auto=$('autoMin').checked;
- busy('joinBtn',true); let r; try{r=await jpost('/bot/dispatch',{url,profile,auto});}catch(e){busy('joinBtn',false,'참석시키기');return toast('서버에 연결하지 못했어요','err');}
+ const profile=$('joinProfile').value, auto=$('autoMin').checked, bot_name=$('botName').value.trim();
+ try{localStorage.setItem('botName',bot_name);}catch(e){}   // 회의마다 바꿔도 마지막 값 기억
+ busy('joinBtn',true); let r; try{r=await jpost('/bot/dispatch',{url,profile,auto,bot_name});}catch(e){busy('joinBtn',false,'참석시키기');return toast('서버에 연결하지 못했어요','err');}
  busy('joinBtn',false,'참석시키기'); const res=$('joinRes');
  if(r.ok===false){res.className='result show err';res.innerHTML='<span class="chip r">실패</span>'+esc(r.error||'오류가 났어요');toast('참석하지 못했어요','err');return;}
  res.className='result show';res.innerHTML='<span class="chip g">참석 요청됨</span>'+
   '<b>'+esc(r.platform||'')+'</b><span style="color:var(--sub)">·</span><code style="background:var(--pri-soft);padding:3px 8px;border-radius:7px">'+esc(r.native_meeting_id||'')+'</code>'+
+  (r.bot_name?'<span class="chip">🏷 '+esc(r.bot_name)+'</span>':'')+
   (auto&&!MOCK.vexa?'<span class="chip" style="margin-left:auto">회의 끝나면 자동 작성</span>':'')+
   (MOCK.vexa?'<span class="chip w" style="margin-left:auto">🧪 흉내 응답 · 실제 참석 아님</span>':'');
  toast(MOCK.vexa?'흉내 모드예요 — 실제 참석은 아니에요':'봇에게 참석을 요청했어요',MOCK.vexa?'warn':'ok');
@@ -393,5 +402,6 @@ async function svcCheck(){try{const h=await jget('/health');$('svcDot').classNam
  catch(e){$('svcDot').className='dot bad';$('svcTxt').textContent='서비스 오프라인';}}
 async function refreshBadges(){try{const d=await jget('/api/files');const f=d.files||[];
  $('bTr').textContent=f.filter(x=>x.kind==='transcript').length;$('bMn').textContent=f.filter(x=>x.kind==='minutes').length;}catch(e){}}
+try{const sn=localStorage.getItem('botName'); if(sn)$('botName').value=sn;}catch(e){}
 svcCheck();refreshBadges();loadTracked();setInterval(loadTracked,8000);
 </script></body></html>"""

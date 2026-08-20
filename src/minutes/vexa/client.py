@@ -24,7 +24,7 @@ def _check(r) -> None:
     if r.status_code >= 400:
         try:
             detail = r.json()
-        except Exception:
+        except Exception:  # noqa: BLE001
             detail = (r.text or "")[:500]
         raise RuntimeError(f"Vexa {r.status_code} {r.request.method} {r.request.url.path}: {detail}")
 
@@ -62,16 +62,18 @@ class VexaClient:
         task: str = "transcribe",
         passcode: str = "",
         meeting_url: str = "",
+        bot_name: str = "",
     ) -> dict[str, Any]:
         """봇을 회의에 참석시킨다.
 
+        bot_name을 주면 회의별로 표시명을 바꾼다(비우면 config 기본 VEXA_BOT_NAME).
         zoom/jitsi는 회의 ID만으론 안 되고 전체 링크(meeting_url)를 요구한다
         (링크의 ?pwd= 로 패스워드도 함께 처리). meet/teams는 native_meeting_id로 충분.
         """
         body = {
             "platform": platform,
             "native_meeting_id": native_meeting_id,
-            "bot_name": self.bot_name,
+            "bot_name": bot_name or self.bot_name,
             "language": language,
             "task": task,
         }

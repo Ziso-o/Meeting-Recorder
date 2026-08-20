@@ -77,6 +77,18 @@ def test_ep_bot_dispatch_mock(monkeypatch):
     assert res["status"] == "requested"
 
 
+def test_dispatch_custom_bot_name(monkeypatch):
+    # 대시보드에서 지정한 봇 이름(한/영)이 그대로 반영
+    monkeypatch.setenv("VEXA_CLIENT", "mock")
+    res = server.ep_bot_dispatch(
+        {"platform": "google_meet", "meeting": "abc", "bot_name": "지엠티씨 회의봇"}
+    )
+    assert res["bot_name"] == "지엠티씨 회의봇"
+    # 비우면 config 기본값으로 폴백
+    res2 = server.ep_bot_dispatch({"platform": "google_meet", "meeting": "abc", "bot_name": ""})
+    assert res2["bot_name"]  # 기본 VEXA_BOT_NAME
+
+
 def test_resolve_target_url_and_fields():
     # 링크면 플랫폼 자동 인식(zoom), 명시 platform이면 그대로
     assert server._resolve_target(

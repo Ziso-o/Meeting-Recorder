@@ -307,7 +307,8 @@ def ep_bot_dispatch(body: dict) -> dict:
         meeting = _meeting(body)
     client = select_vexa_client()
     res = client.request_bot(platform, meeting, language=body.get("language", "ko"),
-                             passcode=passcode, meeting_url=meeting_url)
+                             passcode=passcode, meeting_url=meeting_url,
+                             bot_name=body.get("bot_name", ""))
     # 자동 회의록: 참석 성공 시 회의를 추적 목록에 등록(회의 끝나면 워처가 생성)
     if body.get("auto", True) and str(res.get("status", "")).lower() != "error":
         _track(platform, meeting, body.get("profile", "secure"), body.get("title", ""))
