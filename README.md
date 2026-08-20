@@ -46,7 +46,7 @@ bash scripts/run_local.sh --setup-only   # uv 없어도 python -m venv 폴백
 # ── 수동 설치 ───────────────────────────────────────────────
 uv venv && uv pip install -e ".[transcribe]"    # uv 없으면 python -m venv .venv 후
 #   .venv/Scripts/python -m pip install -e ".[transcribe]"   (Windows / Linux는 .venv/bin/python)
-.venv/Scripts/python -m pytest -q               # 160 passed 확인
+.venv/Scripts/python -m pytest -q               # 162 passed 확인
 ```
 
 > `[transcribe]` = torch/faster-whisper/pyannote(**파일 전사**용, 무거움). Vexa 봇만이면 `[dev]`로 충분.
@@ -178,6 +178,23 @@ CPU·GPU·RAM, CTranslate2/torch가 실제로 보는 것, 이미 받아 둔 모�
 | `WHISPER_BATCH_SIZE` | `8` 권장. VAD로 자른 구간을 묶어 처리(faster-whisper 1.1+) |
 | `WHISPER_CPU_THREADS` | 물리 코어 수를 넣으면 대개 가장 빠릅니다 |
 
+#### 로컬 LLM이 느릴 때 — `scripts/bench_llm.py`
+
+```bash
+python scripts/bench_llm.py --threads 0,4,8,12
+```
+회의록 한 건은 15분 넘게 걸려 설정을 바꿔가며 시험할 수가 없습니다. 이 스크립트는
+**짧은 생성 한 번(수십 초)**으로 `tok/s`를 재고 스레드 수를 비교합니다.
+
+기준: qwen2.5:3b 가 요즘 노트북 CPU에서 **8~15 tok/s**면 정상입니다.
+**2~3 tok/s면 뭔가 잘못된 것**이고, 모델을 더 줄여도 해결되지 않습니다. 이 순서로 보세요:
+
+1. **전원 모드** — 설정 → 시스템 → 전원 → *최고의 성능*. 절전이면 노트북 CPU 클럭이 반토막 납니다
+2. **여유 RAM** — 80%를 넘으면 모델이 스왑됩니다. `wsl --shutdown` 으로 Docker/Vexa를 내리세요
+   (녹음본 처리에는 필요 없습니다)
+3. **Ollama 설치 위치** — `where ollama`. WSL 안에만 있으면 Windows 네이티브로 다시 설치하는 편이 빠릅니다
+4. **스레드** — 위 표에서 가장 빠른 값을 `.env` 의 `OLLAMA_NUM_THREAD` 에
+
 > **NVIDIA GPU가 있는데 `CUDA 장치 0개`로 나오면** 그게 최대 병목입니다.
 > CPU→GPU는 10배 이상이라 다른 튜닝을 전부 합친 것보다 큽니다. 진단 스크립트가 설치 명령을 알려줍니다.
 
@@ -240,7 +257,7 @@ curl -X POST http://localhost:5678/webhook/bot-dispatch -H "Content-Type: applic
 ## 6. 개발 / 구조 / 문서
 
 ```bash
-python -m pytest -q                     # 160개 (mock으로 네트워크·GPU·오디오 없이 e2e)
+python -m pytest -q                     # 162개 (mock으로 네트워크·GPU·오디오 없이 e2e)
 python -m ruff check src tests scripts  # 린트
 ```
 > `prompts/*.md`와 `glossary.yaml`은 **실제 회의 결과를 보며 사람이 직접 튜닝**한다 — 이게 진짜 IP.
@@ -273,6 +290,7 @@ src/minutes/
 ├── audio_formats.py                     # 지원 오디오 확장자(업로드 검증·watch 공용)
 └── config.py · glossary.py             # 설정·용어집
 scripts/  check_env.py · check_env.bat              # 환경 진단 + 권장 .env 출력
+          bench_llm.py                              # 로컬 LLM tok/s 측정(스레드 비교)
           start_windows.bat · start_windows_cpu.bat   # 원클릭 실행(GPU/CPU)
           install_vexa_cpu.bat · install_vexa_cpu.sh  # Vexa 자동 설치(키까지 .env 기입)
 prompts/ · glossary.yaml · workflows/ · docs/ · docker/

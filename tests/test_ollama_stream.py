@@ -136,3 +136,32 @@ def test_diagnosis_distinguishes_failure_modes():
     assert "반복" in p._slow_message("가" * 5000, t, p.num_predict)
     assert "메모리" in p._slow_message("가" * 5000, t, 0)
     assert "작은 모델" in p._slow_message("가" * 5000, t, 50)
+
+
+def test_num_thread_only_sent_when_set(server, monkeypatch):
+    """0이면 Ollama 기본에 맡긴다 — 잘못된 값을 억지로 밀어 넣지 않는다."""
+    _FakeOllama.mode = "ok"
+    monkeypatch.setenv("OLLAMA_NUM_THREAD", "0")
+    OllamaProvider(host=server).generate("입력")
+    assert "num_thread" not in _FakeOllama.seen["options"]
+
+    monkeypatch.setenv("OLLAMA_NUM_THREAD", "8")
+    OllamaProvider(host=server).generate("입력")
+    assert _FakeOllama.seen["options"]["num_thread"] == 8
+
+
+def test_bench_script_survives_no_ollama():
+    """Ollama 가 안 떠 있어도 스크립트가 죽지 않고 안내를 낸다."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    out = subprocess.run(
+        [sys.executable, str(root / "scripts" / "bench_llm.py"),
+         "--threads", "0", "--num-predict", "8"],
+        capture_output=True, text=True, timeout=120, check=False,
+        env={**__import__("os").environ, "OLLAMA_HOST": "http://127.0.0.1:1"},
+    )
+    assert out.returncode == 0, out.stderr[-1500:]
+    assert "전원 모드" in out.stdout        # 느릴 때 확인할 것들을 안내

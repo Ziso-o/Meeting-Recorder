@@ -34,6 +34,9 @@ class OllamaProvider:
         self.keep_alive = os.environ.get("OLLAMA_KEEP_ALIVE", "10m")
         # 소형 모델은 같은 문구를 반복하기 쉽다 — 기본(1.1)보다 조금 세게.
         self.repeat_penalty = float(os.environ.get("OLLAMA_REPEAT_PENALTY", "1.15"))
+        # CPU 스레드. 0이면 Ollama 기본(코어 수 추정)에 맡긴다. P/E 코어가 섞인
+        # 노트북 CPU에서는 기본값이 잘못 잡혀 연산이 굶는 경우가 있어 조정 창구를 둔다.
+        self.num_thread = int(os.environ.get("OLLAMA_NUM_THREAD", "0"))
         self.output_headroom = self.num_predict
 
     def context_size(self, prompt: str) -> int:
@@ -76,6 +79,7 @@ class OllamaProvider:
                 # 출력 상한 — 없으면 소형 모델이 같은 말을 반복하며 컨텍스트를 다 채운다.
                 "num_predict": self.num_predict,
                 "repeat_penalty": self.repeat_penalty,
+                **({"num_thread": self.num_thread} if self.num_thread > 0 else {}),
             },
         }
         if system:
