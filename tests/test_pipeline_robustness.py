@@ -255,3 +255,95 @@ def test_ollama_timeout_is_configurable(monkeypatch):
     assert OllamaProvider().timeout == 1800.0
     monkeypatch.setenv("OLLAMA_TIMEOUT", "3600")
     assert OllamaProvider().timeout == 3600.0
+
+
+# ---- Ollama 컨텍스트 (조용한 잘림 방지) ------------------------------------
+
+def test_context_grows_with_prompt(monkeypatch):
+    """기본 num_ctx 를 넘으면 Ollama 가 프롬프트 앞부분을 조용히 버린다 —
+    회의 앞부분이 통째로 사라진 요약이 나오는 정확성 버그."""
+    from minutes.providers.ollama import OllamaProvider
+
+    monkeypatch.delenv("OLLAMA_MAX_CTX", raising=False)
+    p = OllamaProvider()
+    assert p.context_size("가" * 500) == 4096
+    assert p.context_size("가" * 3000) == 8192
+    assert p.context_size("가" * 8743) == 16384          # 실제로 실패했던 크기
+    # 상한을 넘지 않는다
+    assert p.context_size("가" * 200000) == p.max_ctx
+
+
+def test_context_cap_is_configurable(monkeypatch):
+    from minutes.providers.ollama import OllamaProvider
+
+    monkeypatch.setenv("OLLAMA_MAX_CTX", "8192")
+    assert OllamaProvider().context_size("가" * 50000) == 8192
+
+
+def test_num_ctx_is_sent_to_ollama(monkeypatch):
+    """옵션이 실제 요청에 실려야 의미가 있다."""
+    import httpx
+
+    from minutes.providers.ollama import OllamaProvider
+
+    sent: dict = {}
+
+    class Resp:
+        def raise_for_status(self): return None
+        def json(self): return {"response": "요약함"}
+
+    def fake_post(url, json=None, timeout=None):
+        sent.update(json or {})
+        return Resp()
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    OllamaProvider().generate("가" * 3000)
+    assert sent["options"]["num_ctx"] == 8192
+
+
+# ---- 청크 크기 · 부분 실패 ---------------------------------------------------
+
+def test_chunk_size_is_configurable(monkeypatch):
+    import importlib
+
+    from minutes import chunk as chunk_mod
+
+    monkeypatch.setenv("MINUTES_CHUNK_CHARS", "1200")
+    importlib.reload(chunk_mod)
+    try:
+        assert chunk_mod.DEFAULT_MAX_CHARS == 1200
+        segs = merge_segments(_long_meeting(), [])
+        for c in chunk_mod.chunk_segments(segs):
+            assert sum(len(s.text) for s in c) <= 1200 * 1.1
+    finally:
+        monkeypatch.delenv("MINUTES_CHUNK_CHARS")
+        importlib.reload(chunk_mod)
+
+
+def test_one_failing_chunk_does_not_kill_the_job():
+    """구간 하나가 타임아웃 나도 나머지로 회의록을 만든다."""
+    segs = merge_segments(_long_meeting(), [])
+
+    class Flaky:
+        name = "flaky"
+
+        def __init__(self):
+            self.n = 0
+
+        def generate(self, prompt, *, system=None):
+            self.n += 1
+            if self.n == 2:
+                raise TimeoutError("두 번째 구간에서 타임아웃")
+            return f"구간 {self.n} 요약함"
+
+    p = Flaky()
+    out = chain.summarize_chunks(segs, "", p)
+    assert p.n > 2                     # 실패 후에도 계속 진행
+    assert len(out) == p.n - 1         # 실패한 하나만 빠짐
+
+
+def test_all_chunks_failing_raises_real_cause():
+    """전부 실패했으면 지어내지 말고 원인을 그대로 올린다."""
+    segs = merge_segments(_long_meeting(), [])
+    with pytest.raises(RuntimeError, match="모든 구간 요약이 실패"):
+        chain.summarize_chunks(segs, "", _BoomProvider())

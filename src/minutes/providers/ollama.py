@@ -25,15 +25,37 @@ class OllamaProvider:
         self.timeout = timeout if timeout is not None else float(
             os.environ.get("OLLAMA_TIMEOUT", "1800")
         )
+        self.max_ctx = int(os.environ.get("OLLAMA_MAX_CTX", "16384"))
+        self.output_headroom = 1024
+
+    def context_size(self, prompt: str) -> int:
+        """이 프롬프트에 필요한 컨텍스트 크기(토큰).
+
+        **중요**: Ollama 기본 num_ctx(보통 4096)를 넘으면 프롬프트 **앞부분이 조용히
+        잘린다** — 회의 앞부분이 통째로 사라진 채 요약이 만들어진다. 속도가 아니라
+        정확성 문제라 요청마다 필요한 만큼 명시한다.
+
+        한국어는 대략 1자 ≈ 1토큰(보수적)으로 잡고 출력 여유를 더한다.
+        """
+        need = int(len(prompt) * 1.1) + self.output_headroom
+        for size in (4096, 8192, 16384, 32768):
+            if need <= size:
+                return min(size, self.max_ctx)
+        return self.max_ctx
 
     def generate(self, prompt: str, *, system: str | None = None) -> str:
         import httpx  # 지연 임포트
 
+        num_ctx = self.context_size(prompt)
+        if int(len(prompt) * 1.1) + 512 > num_ctx:
+            print(f"  경고: 프롬프트({len(prompt):,}자)가 컨텍스트 한도({num_ctx})를 넘어"
+                  " 앞부분이 잘릴 수 있습니다. OLLAMA_MAX_CTX 를 늘리거나"
+                  " MINUTES_CHUNK_CHARS 를 줄이세요.")
         payload: dict = {
             "model": self.model,
             "prompt": prompt,
             "stream": False,
-            "options": {"temperature": 0.2},
+            "options": {"temperature": 0.2, "num_ctx": num_ctx},
         }
         if system:
             payload["system"] = system

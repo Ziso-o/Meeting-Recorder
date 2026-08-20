@@ -129,14 +129,23 @@ def summarize_chunks(
     template = _load_prompt("02_chunk_summary.md")
     chunks = chunk_segments(segments)
     summaries: list[str] = []
+    failures: list[str] = []
     for i, chunk in enumerate(chunks, 1):
         prompt = _fill(
             template,
             GLOSSARY=glossary_text,
             CHUNK_TEXT=render_segments(chunk),
         )
-        summaries.append(provider.generate(prompt).strip())
+        try:
+            summaries.append(provider.generate(prompt).strip())
+        except Exception as e:  # noqa: BLE001  한 구간이 실패해도 회의록은 나와야 한다
+            failures.append(f"{i}: {type(e).__name__}: {e}")
+            print(f"  구간 {i}/{len(chunks)} 요약 실패 — 이 구간은 건너뜁니다: {e}")
         on_progress("summary", i, len(chunks))
+
+    if not summaries:
+        # 전부 실패했으면 회의록을 지어낼 수 없다 — 진짜 원인을 그대로 올린다.
+        raise RuntimeError("모든 구간 요약이 실패했습니다.\n" + "\n".join(failures))
     return summaries
 
 

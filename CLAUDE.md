@@ -226,6 +226,23 @@ Meeting-Recorder/
 - 실측: i7-1360P CPU에서 28분 회의 = 23분(turbo+beam1+batch8). 이전 large-v3 대비 2.9배.
 - pytest 148개.
 
+### LLM이 병목 (2026-08) — 전사는 해결됨
+- **실측(i7-1360P, turbo+beam1+batch8)**: 28분 회의 = 전사 11분(2.5배속) + LLM 30분 타임아웃.
+  전사는 더 이상 병목이 아니다. **남은 병목은 CPU 로컬 LLM 100%.**
+- **조용한 정확성 버그 발견**: Ollama 기본 `num_ctx`(보통 4096)를 넘으면 프롬프트
+  **앞부분이 말없이 잘린다** → 회의 앞부분이 사라진 채 요약됨. 8,743자 프롬프트면 확실히 초과.
+  → `OllamaProvider.context_size()`가 요청마다 필요한 만큼(4k/8k/16k/32k) 잡고 `OLLAMA_MAX_CTX`로 상한.
+- `MINUTES_CHUNK_CHARS`(기본 6000→**3000**): CPU 로컬 LLM 기준으로 낮춤. 크게 잡으면 한 번의
+  실패로 전부 잃고 num_ctx가 커져 CPU에서 급격히 느려진다. GPU·클라우드면 올릴 것.
+- `summarize_chunks` 부분 실패 내성: 구간 하나가 실패해도 나머지로 회의록 생성.
+  단 **전부 실패하면 지어내지 말고** 원인을 그대로 올린다.
+- **구조적 결론**: CPU 로컬 LLM으로 8천 자 프롬프트는 무리. 선택지는 (a) 3b급 소형 모델,
+  (b) internal 프로파일을 클라우드로(Gemini/Groq), (c) GPU. 속도로 클로바/ChatGPT를 이길 수는 없고,
+  이 시스템의 축은 **보안(secure는 대안 없음) + 사람 손 0분 자동화**여야 한다.
+- **미구현 갭 2개**: ① 완료 알림이 n8n 워크플로에만 있고 native(server/watch) 경로엔 없음
+  ② ASR이 프로파일을 안 따름(LLM만 분기) → internal도 무조건 로컬 전사.
+- pytest 154개.
+
 ### 브랜치 단일화 (2026-08, 완료)
 - **이제 브랜치는 `main` 하나뿐이다.** 기본 브랜치도 `main`.
 - `main`을 작업 계보(`claude/clova-note-recording-support-1kna7y`, 51커밋)로 강제 갱신하고

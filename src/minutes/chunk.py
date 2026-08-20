@@ -6,10 +6,16 @@
 
 from __future__ import annotations
 
+import os
+
 from .schema import Segment
 
 DEFAULT_WINDOW_SEC = 1800.0  # 30분
-DEFAULT_MAX_CHARS = 6000
+
+#: 청크 한 개의 최대 글자수. **CPU 로컬 LLM 기준**으로 잡는다.
+#: 크게 잡으면 호출은 줄지만 한 번의 실패로 전부 잃고, Ollama 컨텍스트가 커져
+#: CPU에서 급격히 느려진다. GPU·클라우드 LLM이면 6000 이상으로 올려도 된다.
+DEFAULT_MAX_CHARS = int(os.environ.get("MINUTES_CHUNK_CHARS", "3000"))
 
 
 def _split_oversized(segments: list[Segment], max_chars: int) -> list[Segment]:
