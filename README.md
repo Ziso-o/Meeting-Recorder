@@ -151,8 +151,20 @@ git pull origin main
 
 #### 내 PC에서 뭘로 돌려야 하나 — `scripts/check_env.py`
 
+**가장 쉬운 방법: `scripts/check_env.bat` 더블클릭.**
+
+터미널에서 돌린다면 — **Git Bash 에서는 경로에 `/`(슬래시)를 쓰세요.**
+`\`는 Git Bash 가 이스케이프 문자로 먹어서 `.venvScriptspython: command not found` 가 납니다.
+
 ```bash
-python scripts/check_env.py
+# Git Bash (MINGW64)
+.venv/Scripts/python scripts/check_env.py
+
+# PowerShell / cmd
+.venv\Scripts\python scripts\check_env.py
+
+# Linux · mac
+.venv/bin/python scripts/check_env.py
 ```
 CPU·GPU·RAM, CTranslate2/torch가 실제로 보는 것, 이미 받아 둔 모델, Ollama 상태를 찍고
 **이 PC에 맞는 `.env` 값을 그대로 출력**합니다. 추측 대신 이걸 먼저 돌리세요.
@@ -243,7 +255,7 @@ src/minutes/
 ├── server.py · _webui.py                # HTTP 서비스 + 웹 대시보드(자동회의록·녹음본업로드·파일관리)
 ├── audio_formats.py                     # 지원 오디오 확장자(업로드 검증·watch 공용)
 └── config.py · glossary.py             # 설정·용어집
-scripts/  check_env.py                              # 환경 진단 + 권장 .env 출력
+scripts/  check_env.py · check_env.bat              # 환경 진단 + 권장 .env 출력
           start_windows.bat · start_windows_cpu.bat   # 원클릭 실행(GPU/CPU)
           install_vexa_cpu.bat · install_vexa_cpu.sh  # Vexa 자동 설치(키까지 .env 기입)
 prompts/ · glossary.yaml · workflows/ · docs/ · docker/
