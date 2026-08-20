@@ -9,8 +9,10 @@
 회의록은 마크다운, 녹취는 화자 말풍선으로 렌더한다.
 """
 
+from .audio_formats import ACCEPT_ATTR
+
 # 원시 문자열(r""")로 두어 JS 정규식의 백슬래시가 파이썬에 먹히지 않게 한다.
-INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
+_TEMPLATE = r"""<!doctype html><html lang="ko"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>회의록 봇 대시보드</title>
 <style>
@@ -119,6 +121,14 @@ INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
  .viewer{background:var(--card);border-radius:var(--r);box-shadow:var(--sh);padding:26px 28px;min-height:300px}
  .empty{color:var(--sub);text-align:center;padding:60px 20px;font-size:14px;line-height:1.6}
  .empty .big{font-size:38px;margin-bottom:10px;opacity:.55}
+ /* 녹음본 드롭존 */
+ .drop{border:2px dashed var(--line);border-radius:16px;padding:34px 20px;text-align:center;cursor:pointer;
+  background:var(--fill);transition:.15s;color:var(--sub);font-size:14px;line-height:1.7}
+ .drop:hover,.drop.over{border-color:var(--pri);background:var(--pri-tint);color:var(--text)}
+ .drop .big{font-size:36px;opacity:.7;margin-bottom:6px} .drop b{color:var(--text);font-size:15px}
+ .drop .dsub{font-size:12.5px;color:var(--sub);margin-top:4px}
+ .bar{height:8px;border-radius:99px;background:var(--fill-2);overflow:hidden;margin-top:14px}
+ .bar i{display:block;height:100%;width:0;border-radius:99px;background:var(--pri);transition:width .15s}
  .skel{height:16px;border-radius:8px;background:linear-gradient(90deg,var(--skel1),var(--skel2),var(--skel1));
   background-size:200% 100%;animation:sh 1.2s infinite;margin:10px 0}
  @keyframes sh{to{background-position:-200% 0}}
@@ -156,6 +166,7 @@ INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
   <div class="nav">
    <button class="on" data-v="join" onclick="go('join')"><span class="ic">▶</span>회의 참석</button>
    <button data-v="status" onclick="go('status')"><span class="ic">📡</span>상태 모니터링</button>
+   <button data-v="audio" onclick="go('audio')"><span class="ic">🎧</span>녹음본 올리기<span class="badge" id="bAu">0</span></button>
    <button data-v="transcript" onclick="go('transcript')"><span class="ic">🎙</span>녹취파일<span class="badge" id="bTr">0</span></button>
    <button data-v="minutes" onclick="go('minutes')"><span class="ic">📄</span>회의록<span class="badge" id="bMn">0</span></button>
   </div>
@@ -201,6 +212,33 @@ INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
    </div>
   </section>
 
+  <section id="audio" class="view">
+   <div class="card">
+    <h3>녹음본으로 회의록 만들기</h3>
+    <p class="desc">클로바 노트로 받은 녹음 파일이나 휴대폰 녹음을 올리면, 전사(화자분리)부터 회의록까지 이어서 만들어요.</p>
+    <div class="drop" id="drop" onclick="$('upAu').click()">
+     <div class="big">🎧</div>
+     <div><b>파일을 여기로 끌어다 놓거나, 눌러서 고르세요</b></div>
+     <div class="dsub" id="dropHint">m4a · aac · mp3 · wav · flac · ogg — 한 개에 최대 500MB</div>
+    </div>
+    <input type="file" id="upAu" accept="{{AUDIO_ACCEPT}}" multiple style="display:none" onchange="pickAudio(this)">
+    <div class="field" style="margin-top:14px">
+     <input class="input" id="auTitle" placeholder="회의 제목 (선택) — 회의록 맨 위에 들어가요">
+     <select class="select" id="auProfile" style="flex:0 0 140px"><option value="secure">secure · 로컬</option><option value="internal">internal</option></select>
+    </div>
+    <div class="bar" id="upBar" style="display:none"><i id="upFill"></i></div>
+    <div class="result" id="auRes"></div>
+   </div>
+   <div class="card" id="jobCard" style="display:none">
+    <h3>진행 상황 <span class="desc" style="font-weight:500">전사 → 회의록</span></h3>
+    <div class="flist" id="jobList" style="margin-top:14px"></div>
+   </div>
+   <div class="card">
+    <h3>올린 녹음본 <span class="desc" style="font-weight:500">다시 만들거나 지울 수 있어요</span></h3>
+    <div class="flist" id="auList" style="margin-top:14px"></div>
+   </div>
+  </section>
+
   <section id="status" class="view">
    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
     <button class="btn gray sm" onclick="loadStatus()">↻ 새로고침</button>
@@ -243,6 +281,7 @@ INDEX_HTML = r"""<!doctype html><html lang="ko"><head>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const TITLES={join:['회의 참석','회의 링크를 붙여넣으면 봇이 회의에 참석해요.'],
+ audio:['녹음본 올리기','클로바 노트 녹음본을 올리면 회의록까지 만들어 드려요.'],
  status:['상태 모니터링','서비스와 Vexa 봇이 잘 도는지 확인해요.'],
  transcript:['녹취파일','봇이 모은 화자별 전사를 볼 수 있어요.'],
  minutes:['회의록','LLM이 정리한 회의록을 볼 수 있어요.']};
@@ -257,7 +296,8 @@ async function jget(path){const r=await fetch(path);return r.json();}
 function go(v){document.querySelectorAll('.view').forEach(s=>s.classList.toggle('on',s.id===v));
  document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
  $('vTitle').textContent=TITLES[v][0];$('vDesc').textContent=TITLES[v][1];
- if(v==='status')loadStatus(); if(v==='transcript')loadFiles('transcript'); if(v==='minutes')loadFiles('minutes');}
+ if(v==='status')loadStatus(); if(v==='transcript')loadFiles('transcript'); if(v==='minutes')loadFiles('minutes');
+ if(v==='audio'){loadFiles('audio');loadJobs();}}
 
 /* 참석 */
 async function joinBot(){const url=$('url').value.trim(); if(!url)return toast('회의 링크를 넣어 주세요','err');
@@ -314,21 +354,29 @@ function card(k,v,tone){const c=tone==='ok'?'var(--ok)':tone==='bad'?'var(--dang
  return '<div class="stat"><div class="k">'+esc(k)+'</div><div class="v" style="color:'+c+'">'+esc(v)+'</div></div>';}
 
 /* 파일 목록/뷰어 */
-async function loadFiles(kind){const listId=kind==='minutes'?'mnList':'trList';const box=$(listId);
+const LIST_ID={minutes:'mnList',transcript:'trList',audio:'auList'};
+const VIEW_ID={minutes:'mnView',transcript:'trView'};
+const KIND_IC={minutes:['📄','var(--pri-soft)'],transcript:['🎙','var(--ok-soft)'],audio:['🎧','var(--warn-soft)']};
+const KIND_LABEL={minutes:'회의록',transcript:'녹취파일',audio:'녹음본'};
+const KIND_EMPTY={minutes:'회의가 끝나면 여기에 쌓여요.',transcript:'회의가 끝나면 여기에 쌓여요.',
+ audio:'위에서 녹음본을 올리면 여기에 쌓여요.'};
+async function loadFiles(kind){const box=$(LIST_ID[kind]); if(!box)return;
  box.innerHTML='<div class="skel" style="height:66px"></div><div class="skel" style="height:66px"></div>';
  let d; try{d=await jget('/api/files');}catch(e){box.innerHTML='<div class="empty">목록을 불러오지 못했어요.</div>';return;}
- const rows=(d.files||[]).filter(f=>f.kind===kind);
- $('bTr').textContent=(d.files||[]).filter(f=>f.kind==='transcript').length;
- $('bMn').textContent=(d.files||[]).filter(f=>f.kind==='minutes').length;
- if(!rows.length){const label=kind==='minutes'?'회의록':'녹취파일';
-  box.innerHTML='<div class="empty"><div class="big">🗂️</div>아직 '+label+'이 없어요.<br><span style="font-size:12px">회의가 끝나면 여기에 쌓여요.</span></div>';return;}
- const ic=kind==='minutes'?['📄','var(--pri-soft)']:['🎙','var(--ok-soft)'];
- box.innerHTML=rows.map(f=>'<div class="fitem" data-p="'+esc(f.path)+'" onclick="openFile(\''+kind+'\',this)">'+
+ const all=d.files||[]; const rows=all.filter(f=>f.kind===kind); setBadges(all);
+ if(!rows.length){
+  box.innerHTML='<div class="empty"><div class="big">🗂️</div>아직 '+KIND_LABEL[kind]+'이 없어요.<br><span style="font-size:12px">'+KIND_EMPTY[kind]+'</span></div>';return;}
+ const ic=KIND_IC[kind], audio=kind==='audio';
+ box.innerHTML=rows.map(f=>'<div class="fitem" data-p="'+esc(f.path)+'"'+(audio?' style="cursor:default"':' onclick="openFile(\''+kind+'\',this)"')+'>'+
   '<div class="fic" style="background:'+ic[1]+'">'+ic[0]+'</div>'+
   '<div style="flex:1;min-width:0"><div class="fname">'+esc(f.name)+'</div><div class="fmeta">'+new Date(f.mtime*1000).toLocaleString('ko-KR')+' · '+fmtSize(f.size)+'</div></div>'+
+  (audio?'<button class="iconbtn" title="회의록 다시 만들기" onclick="runAudio(event)">▶</button>':'')+
   '<button class="iconbtn" title="이름 변경" onclick="renFile(event,\''+kind+'\')">✎</button>'+
   '<button class="iconbtn del" title="삭제" onclick="delFile(event,\''+kind+'\')">🗑</button>'+
   '</div>').join('');}
+function setBadges(all){$('bTr').textContent=all.filter(x=>x.kind==='transcript').length;
+ $('bMn').textContent=all.filter(x=>x.kind==='minutes').length;
+ $('bAu').textContent=all.filter(x=>x.kind==='audio').length;}
 async function doUpload(kind,el){const f=el.files&&el.files[0]; el.value=''; if(!f)return;
  let text; try{text=await f.text();}catch(e){return toast('파일을 읽지 못했어요','err');}
  const r=await jpost('/api/upload',{kind,name:f.name,content:text});
@@ -338,20 +386,91 @@ async function delFile(ev,kind){ev.stopPropagation();
  const el=ev.currentTarget.closest('.fitem'),path=el.dataset.p;
  if(!confirm('이 파일을 삭제할까요?\n'+path))return;
  const r=await jpost('/api/delete',{path}); if(r.ok===false)return toast('삭제 실패: '+esc(r.error),'err');
- toast('삭제했어요','ok'); $(kind==='minutes'?'mnView':'trView').innerHTML='<div class="empty">삭제했어요.</div>'; loadFiles(kind);}
+ toast('삭제했어요','ok'); const v=$(VIEW_ID[kind]); if(v)v.innerHTML='<div class="empty">삭제했어요.</div>'; loadFiles(kind);}
 async function renFile(ev,kind){ev.stopPropagation();
  const el=ev.currentTarget.closest('.fitem'),path=el.dataset.p;
  const cur=el.querySelector('.fname').textContent.replace(/\.(minutes\.md|transcript\.json)$/,'');
  const nn=prompt('새 이름 (확장자 빼고):',cur); if(nn===null||!nn.trim())return;
  const r=await jpost('/api/rename',{path,name:nn.trim()}); if(r.ok===false)return toast('이름 변경 실패: '+esc(r.error),'err');
  toast('이름을 바꿨어요','ok'); loadFiles(kind);}
-function fmtSize(b){return b<1024?b+' B':(b/1024).toFixed(1)+' KB';}
-async function openFile(kind,el){const listId=kind==='minutes'?'mnList':'trList',viewId=kind==='minutes'?'mnView':'trView';
+function fmtSize(b){if(b<1024)return b+' B'; if(b<1048576)return (b/1024).toFixed(1)+' KB';
+ if(b<1073741824)return (b/1048576).toFixed(1)+' MB'; return (b/1073741824).toFixed(2)+' GB';}
+async function openFile(kind,el){const listId=LIST_ID[kind],viewId=VIEW_ID[kind];
  document.querySelectorAll('#'+listId+' .fitem').forEach(x=>x.classList.remove('sel'));el.classList.add('sel');
  const v=$(viewId);v.innerHTML='<div class="skel" style="width:50%"></div><div class="skel"></div><div class="skel" style="width:80%"></div>';
  let d; try{d=await jget('/api/file?path='+encodeURIComponent(el.dataset.p));}catch(e){v.innerHTML='<div class="empty">내용을 불러오지 못했어요.</div>';return;}
  if(d.ok===false){v.innerHTML='<div class="empty">'+esc(d.error||'내용을 불러오지 못했어요.')+'</div>';return;}
  v.innerHTML=kind==='minutes'?'<div class="md">'+mdToHtml(d.content)+'</div>':renderTranscript(d.content);}
+
+/* 녹음본 업로드 (raw 바이너리 스트리밍 · base64 없음) */
+const AUDIO_EXTS='{{AUDIO_ACCEPT}}'.split(',');
+const DROP_HINT_DEFAULT='m4a · aac · mp3 · wav · flac · ogg — 한 개에 최대 ';
+let AUQ=[],AUBUSY=false;
+function setLimitHint(mb){$('dropHint').innerHTML=DROP_HINT_DEFAULT+esc(mb)+'MB';}
+function pickAudio(el){const fs=Array.prototype.slice.call(el.files||[]); el.value=''; addAudio(fs);}
+/* 올리기 전에 걸러낸다 — 상한을 넘긴 업로드는 서버가 중간에 끊어서
+   브라우저가 사유를 못 읽으므로, 정확한 이유는 여기서 알려줘야 한다. */
+function addAudio(fs){const ok=[];
+ fs.forEach(f=>{const mb=LIMITS.audio_mb||500;
+  if(!AUDIO_EXTS.some(e=>f.name.toLowerCase().endsWith(e)))
+   return toast(f.name+' — 오디오 파일이 아니에요 ('+AUDIO_EXTS.join(' ')+')','err');
+  if(f.size>mb*1048576)
+   return toast(f.name+' — '+fmtSize(f.size)+'이라 너무 커요 (최대 '+mb+'MB)','err');
+  ok.push(f);});
+ if(!ok.length)return; ok.forEach(f=>AUQ.push(f)); if(!AUBUSY)nextAudio();}
+function nextAudio(){const f=AUQ.shift();
+ if(!f){AUBUSY=false;$('upBar').style.display='none';setLimitHint(LIMITS.audio_mb||500);return;}
+ AUBUSY=true; uploadAudio(f);}
+function setBar(ratio,name){const pct=Math.round(ratio*100);
+ $('upFill').style.width=pct+'%'; $('dropHint').textContent=name+' 올리는 중… '+pct+'%';}
+/* fetch는 업로드 진행률을 못 주므로 XHR을 쓴다. 파일 객체를 그대로 보내 브라우저·서버
+   양쪽 모두 통짜 메모리 버퍼를 만들지 않는다. */
+function uploadAudio(f){
+ const q='?profile='+encodeURIComponent($('auProfile').value)+'&auto=1'+
+  '&title='+encodeURIComponent($('auTitle').value.trim());
+ const x=new XMLHttpRequest(); x.open('POST','/api/upload/audio'+q);
+ x.setRequestHeader('X-Filename',encodeURIComponent(f.name));
+ x.setRequestHeader('Content-Type','application/octet-stream');
+ $('upBar').style.display='block'; setBar(0,f.name);
+ x.upload.onprogress=e=>{if(e.lengthComputable)setBar(e.loaded/e.total,f.name);};
+ x.onload=()=>{let r={}; try{r=JSON.parse(x.responseText);}catch(e){}
+  const res=$('auRes');
+  if(r.ok!==true){res.className='result show err';
+   res.innerHTML='<span class="chip r">올리지 못했어요</span>'+esc(r.error||('HTTP '+x.status));
+   toast('올리지 못했어요','err');}
+  else{res.className='result show';
+   res.innerHTML='<span class="chip g">올렸어요</span><b>'+esc(r.name)+'</b>'+
+    '<span style="color:var(--sub)">·</span>'+fmtSize(r.size)+
+    '<span class="chip" style="margin-left:auto">'+(MOCK.asr?'🧪 흉내로 회의록 만드는 중':'회의록 만드는 중')+'</span>';
+   toast('올렸어요 — 이제 회의록을 만들어요','ok');}
+  loadJobs(); loadFiles('audio'); nextAudio();};
+ x.onerror=()=>{toast('서버에 연결하지 못했어요','err'); nextAudio();};
+ x.send(f);}
+async function runAudio(ev){ev.stopPropagation();
+ const path=ev.currentTarget.closest('.fitem').dataset.p;
+ const r=await jpost('/api/audio/process',{path,profile:$('auProfile').value,title:$('auTitle').value.trim()});
+ if(r.ok===false)return toast('시작하지 못했어요: '+esc(r.error),'err');
+ toast('회의록을 다시 만들어요','ok'); loadJobs();}
+
+/* 처리 진행 상황 — 진행 중인 작업이 있을 때만 폴링 */
+const JSTAT={queued:['차례를 기다리는 중','var(--sub)'],running:['진행 중','var(--pri)'],
+ done:['회의록 완료','var(--ok)'],failed:['실패','var(--danger)']};
+let jobTimer=null;
+async function loadJobs(){let d; try{d=await jget('/api/jobs');}catch(e){return;}
+ const rows=d.jobs||[],card=$('jobCard');
+ if(!rows.length){card.style.display='none';}
+ else{card.style.display='';
+  $('jobList').innerHTML=rows.map(j=>{const st=JSTAT[j.status]||[j.status,'var(--sub)'];
+   return '<div class="fitem" style="cursor:default"><div class="fic" style="background:var(--warn-soft)">'+
+    (j.status==='running'?'<span class="spin" style="border-color:rgba(125,125,125,.3);border-top-color:var(--pri)"></span>':'🎧')+'</div>'+
+    '<div style="flex:1;min-width:0"><div class="fname">'+esc(j.name)+'</div>'+
+    '<div class="fmeta" style="color:'+st[1]+'">'+esc(j.step||st[0])+
+     (j.segments?(' · 세그먼트 '+j.segments):'')+(j.error?(' — '+esc(j.error)):'')+'</div></div>'+
+    (j.status==='done'?'<button class="btn pri sm" onclick="go(\'minutes\')">회의록 보기</button>':'')+
+    '</div>';}).join('');}
+ const active=rows.some(j=>j.status==='queued'||j.status==='running');
+ if(active&&!jobTimer)jobTimer=setInterval(loadJobs,3000);
+ if(!active&&jobTimer){clearInterval(jobTimer);jobTimer=null;refreshBadges();}}
 
 /* 마크다운 렌더 */
 function inlineMd(s){s=esc(s);s=s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
@@ -386,7 +505,7 @@ function renderTranscript(txt){let d;try{d=JSON.parse(txt);}catch(e){return '<pr
    '<div class="btext">'+esc(s.text)+'</div></div></div>';}).join('')+'</div>';}
 
 /* 부트스트랩 */
-let MOCK={};
+let MOCK={},LIMITS={};
 const MOCK_LABEL={vexa:'봇 참석',llm:'회의록 작성',asr:'전사',diarizer:'화자분리'};
 function applyMock(m){MOCK=m||{};const b=$('modeBadge');const sw=$('mockSw');if(sw)sw.checked=!!(m&&m.any);
  if(m&&m.any){const parts=Object.keys(MOCK_LABEL).filter(k=>m[k]).map(k=>MOCK_LABEL[k]);
@@ -398,10 +517,17 @@ async function setMode(on){let r;try{r=await jpost('/mode',{mock:on});}catch(e){
  applyMock(r.mock);
  if(on)toast('흉내 모드로 바꿨어요 — 실제로 동작하지 않아요','warn');
  else toast('실제 모드로 바꿨어요 — Vexa·모델이 켜져 있어야 동작해요','ok');}
-async function svcCheck(){try{const h=await jget('/health');$('svcDot').className='dot ok';$('svcTxt').textContent='서비스 온라인';applyMock(h.mock);}
+async function svcCheck(){try{const h=await jget('/health');$('svcDot').className='dot ok';$('svcTxt').textContent='서비스 온라인';applyMock(h.mock);
+  LIMITS=h.limits||{}; if(LIMITS.audio_mb)setLimitHint(LIMITS.audio_mb);}
  catch(e){$('svcDot').className='dot bad';$('svcTxt').textContent='서비스 오프라인';}}
-async function refreshBadges(){try{const d=await jget('/api/files');const f=d.files||[];
- $('bTr').textContent=f.filter(x=>x.kind==='transcript').length;$('bMn').textContent=f.filter(x=>x.kind==='minutes').length;}catch(e){}}
+async function refreshBadges(){try{const d=await jget('/api/files');setBadges(d.files||[]);}catch(e){}}
+(function dnd(){const z=$('drop'); if(!z)return;
+ ['dragenter','dragover'].forEach(e=>z.addEventListener(e,ev=>{ev.preventDefault();z.classList.add('over');}));
+ ['dragleave','drop'].forEach(e=>z.addEventListener(e,ev=>{ev.preventDefault();z.classList.remove('over');}));
+ z.addEventListener('drop',ev=>addAudio(Array.prototype.slice.call(ev.dataTransfer.files||[])));})();
 try{const sn=localStorage.getItem('botName'); if(sn)$('botName').value=sn;}catch(e){}
-svcCheck();refreshBadges();loadTracked();setInterval(loadTracked,8000);
+svcCheck();refreshBadges();loadTracked();loadJobs();setInterval(loadTracked,8000);
 </script></body></html>"""
+
+# 지원 오디오 확장자는 audio_formats 한 곳에서만 관리한다(서버 검증과 항상 일치).
+INDEX_HTML = _TEMPLATE.replace("{{AUDIO_ACCEPT}}", ACCEPT_ATTR)

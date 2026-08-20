@@ -100,12 +100,30 @@ git pull origin claude/meeting-minutes-automation-07augh
 | 좌측 네비 | 하는 일 |
 |---|---|
 | ▶ 회의 참석 | 링크 붙여넣기 → 봇 참석(Meet/Zoom/Teams/Jitsi 자동 인식) · **봇 이름 지정(한/영)** · **회의 끝나면 자동 회의록** · 봇 종료 |
+| 🎧 녹음본 올리기 | **클로바 노트 등 녹음 파일(m4a·aac·mp3·wav…) 업로드 → 전사→회의록 자동 생성** · 진행상황 표시 |
 | 📡 상태 모니터링 | 서비스 / Vexa / 실행 봇 + 흉내·실제 모드 |
 | 🎙 녹취파일 | 전사 → **화자별 말풍선** · **업로드/삭제/이름변경** |
 | 📄 회의록 | 회의록 **마크다운 렌더** · **업로드/삭제/이름변경** |
 
 - 좌측 **흉내↔실제 스위치**로 mock/실제 전환(재시작 불필요). 실제 모드는 `.env`에 Vexa 주소·키 필요.
 - **자동 회의록**: "참석시키기" 한 번 → 회의가 끝나 봇이 나가면 워처가 **전사→회의록을 자동 생성**(수동 개입 불필요).
+
+#### 🎧 녹음본 올리기 (봇을 못 넣은 회의 · 클로바 노트 녹음본)
+
+봇이 참석하지 못한 회의는 **녹음 파일만 올리면** 같은 결과를 얻는다.
+드래그&드롭(또는 클릭)으로 올리면 **전사(화자분리) → 회의록**까지 백그라운드로 진행되고,
+"진행 상황" 카드가 단계를 보여준다. 끝나면 `📄 회의록`에 쌓인다.
+
+- **지원 형식**: `.m4a` `.aac` `.mp3` `.wav` `.flac` `.ogg` `.opus` `.webm` `.mp4` 등
+  (실제 디코딩은 ffmpeg가 하므로 ffmpeg가 읽는 건 대부분 된다). **클로바 노트 기본 내보내기 = `.m4a`**.
+- **크기 상한**: 기본 500MB(`MINUTES_MAX_UPLOAD_MB`). 1시간짜리 m4a가 보통 30MB 안팎이라 넉넉하다.
+  업로드는 **디스크로 스트리밍 저장**하므로 큰 파일이어도 서버 메모리를 먹지 않는다.
+- 저장 위치: `data/uploads/audio/` (원본 보관) → 회의록은 `data/out/<profile>/`.
+  목록의 `▶` 버튼으로 **같은 녹음본을 다시 처리**할 수 있다(프로파일만 바꿔 재생성 등).
+- CLI로도 동일: `python -m minutes.pipeline --audio "회의.m4a" --profile secure`
+
+> **전사 JSON·회의록 MD 업로드(`🎙`/`📄` 탭)는 별개**다. 이쪽은 요청 본문을 통째로 메모리에
+> 올리는 JSON 경로라 상한이 5MB(`MINUTES_MAX_TEXT_UPLOAD_MB`)로 따로 잡혀 있다.
 
 ---
 
@@ -152,7 +170,7 @@ curl -X POST http://localhost:5678/webhook/bot-dispatch -H "Content-Type: applic
 ## 6. 개발 / 구조 / 문서
 
 ```bash
-python -m pytest -q                     # 73개 (mock으로 네트워크·GPU·오디오 없이 e2e)
+python -m pytest -q                     # 100개 (mock으로 네트워크·GPU·오디오 없이 e2e)
 python -m ruff check src tests scripts  # 린트
 ```
 > `prompts/*.md`와 `glossary.yaml`은 **실제 회의 결과를 보며 사람이 직접 튜닝**한다 — 이게 진짜 IP.
@@ -164,7 +182,8 @@ src/minutes/
 ├── transcribe.py · asr/                # Phase 2 전사(audio·whisper·groq·diarize·merge)
 ├── pipeline.py · watch.py              # Phase 3 결합 + 폴더 무인
 ├── bot.py · vexa/                       # Phase 4 봇(client·convert·meeting_url·mock)
-├── server.py · _webui.py                # HTTP 서비스 + 웹 대시보드(자동회의록·봇이름·파일관리)
+├── server.py · _webui.py                # HTTP 서비스 + 웹 대시보드(자동회의록·녹음본업로드·파일관리)
+├── audio_formats.py                     # 지원 오디오 확장자(업로드 검증·watch 공용)
 └── config.py · glossary.py             # 설정·용어집
 scripts/  start_windows.bat · start_windows_cpu.bat   # 원클릭 실행(GPU/CPU)
           install_vexa_cpu.bat · install_vexa_cpu.sh  # Vexa 자동 설치(키까지 .env 기입)

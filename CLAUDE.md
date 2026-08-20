@@ -147,6 +147,22 @@ Meeting-Recorder/
   - `MINUTES_SERVER_URL`(n8n측), `MINUTES_SERVER_HOST/PORT`(서버측)로 주소 지정.
 - executeCommand 기반(`vexa_meeting.json`/`_local.json`)은 참고용 보존. **정본은 HTTP 방식.**
 
+### 녹음본(클로바 노트) 업로드 지원 (2026-08)
+- **배경**: 대시보드 업로드가 텍스트 전용이라 `.m4a`를 못 받았고, 5MB 상한이 하드코딩돼 있었다.
+  (엔진은 처음부터 ffmpeg 경유라 m4a/aac를 지원했음 — 막힌 건 **웹 업로드 경로**뿐.)
+- `audio_formats.py`: 지원 확장자 **단일 출처**(server 검증 · watch 스캔 · 대시보드 `accept` 모두 여기서).
+- **`POST /api/upload/audio`**: JSON/base64가 아니라 **raw 바이너리 스트리밍**. 파일명은 `X-Filename`(URL 인코딩),
+  옵션은 쿼리(`profile`/`title`/`auto`). 1MB 청크로 디스크에 흘려보내 큰 파일도 메모리를 안 씀.
+  `.part`로 쓰고 완료 시 rename → watch가 미완성 파일을 집지 않음.
+- **상한은 환경변수**: `MINUTES_MAX_UPLOAD_MB`(녹음본, 기본 500) / `MINUTES_MAX_TEXT_UPLOAD_MB`(텍스트, 기본 5).
+  텍스트 상한은 **바이트 기준으로 수정**(예전엔 문자 수라 한글이 실질 3배로 헐거웠음).
+  거부 시: `Expect: 100-continue` 응답 + 남은 본문 버리기(32MB까지) + **브라우저 측 사전 검사**(사유를 정확히 보여주려면 필수 —
+  서버가 중간에 끊으면 XHR이 응답을 못 읽는다).
+- **작업 큐**: 업로드 즉시 응답하고 전사→회의록은 백그라운드 스레드(`_JOBS`), 진행상황은 `GET /api/jobs` 폴링.
+  `auto=1` → `data/uploads/audio/`(서버가 처리) / `auto=0` → `data/incoming/`(외부 `minutes.watch`가 처리) — **폴더를 갈라 중복 처리 방지**.
+- `POST /api/audio/process`로 기존 녹음본 재처리. 파일 목록/삭제/이름변경에 `audio` 종류 추가(확장자 보존).
+- pytest 100개 통과(HTTP 소켓 레벨 테스트 포함). 브라우저(Playwright)로 업로드→회의록 UI 경로까지 확인.
+
 ### 개발 환경 메모
 - `uv venv && uv pip install -e ".[dev]"` 후 `python -m minutes.generate` 사용(‑e 설치 필요).
 - 무인 자동화: `python -m minutes.watch --profile secure` (data/incoming→data/out, done/failed 이동).

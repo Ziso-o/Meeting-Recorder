@@ -20,9 +20,8 @@ import time
 from pathlib import Path
 
 from . import pipeline
+from .audio_formats import AUDIO_EXTS
 from .config import load_dotenv
-
-AUDIO_EXTS = {".m4a", ".mp3", ".wav", ".flac", ".ogg", ".webm", ".mp4", ".aac"}
 
 
 def find_audio(incoming: Path) -> list[Path]:
