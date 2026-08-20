@@ -32,6 +32,9 @@ class GroqEngine:
         self.language = language
         self.timeout = timeout
 
+    def load(self) -> None:
+        return None  # 클라우드 API — 받아 둘 모델이 없다
+
     def transcribe(self, wav_path: str, initial_prompt: str = "") -> list[ASRSegment]:
         import httpx  # 지연 임포트
 

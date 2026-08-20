@@ -8,6 +8,9 @@ from .base import ASRSegment, SpeakerTurn
 class MockASREngine:
     name = "mock"
 
+    def load(self) -> None:
+        return None
+
     def transcribe(self, wav_path: str, initial_prompt: str = "") -> list[ASRSegment]:
         return [
             ASRSegment(start=0.0, end=3.0, text="안녕하세요 회의를 시작하겠습니다"),

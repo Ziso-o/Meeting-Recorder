@@ -25,7 +25,8 @@ class FasterWhisperEngine:
         self.language = language
         self._model = None
 
-    def _load(self):
+    def load(self):
+        """모델 준비 — 캐시에 없으면 여기서 다운로드가 일어난다(large-v3 약 3GB)."""
         if self._model is None:
             from faster_whisper import WhisperModel  # 지연 임포트
 
@@ -35,7 +36,7 @@ class FasterWhisperEngine:
         return self._model
 
     def transcribe(self, wav_path: str, initial_prompt: str = "") -> list[ASRSegment]:
-        model = self._load()
+        model = self.load()
         segments, _info = model.transcribe(
             wav_path,
             language=self.language,

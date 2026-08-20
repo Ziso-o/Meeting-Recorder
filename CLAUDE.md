@@ -162,7 +162,24 @@ Meeting-Recorder/
 - **작업 큐**: 업로드 즉시 응답하고 전사→회의록은 백그라운드 스레드(`_JOBS`), 진행상황은 `GET /api/jobs` 폴링.
   `auto=1` → `data/uploads/audio/`(서버가 처리) / `auto=0` → `data/incoming/`(외부 `minutes.watch`가 처리) — **폴더를 갈라 중복 처리 방지**.
 - `POST /api/audio/process`로 기존 녹음본 재처리. 파일 목록/삭제/이름변경에 `audio` 종류 추가(확장자 보존).
-- pytest 102개 통과(HTTP 소켓 레벨 테스트 포함). 브라우저(Playwright)로 업로드→회의록 UI 경로까지 확인.
+- pytest 통과(HTTP 소켓 레벨 테스트 포함). 브라우저(Playwright)로 업로드→회의록 UI 경로까지 확인.
+
+### 전사 진행 가시성 (2026-08)
+- **문제**: 첫 실행에서 large-v3(3GB)를 받는 40분 동안 대시보드가 계속 "전사하는 중"만 표시 →
+  멈춘 것과 구분 불가. 실사용 중 실제로 겪음.
+- `asr/info.py`(신규): 디바이스 판정(ctranslate2 → torch 순, 불명이면 보수적으로 cpu),
+  HF 캐시 경로(`HF_HUB_CACHE`/`HF_HOME` 반영), `is_model_cached`(.incomplete 있으면 미완),
+  모델별 예상 크기·(디바이스,크기군)별 전사 소요 **범위** 추정.
+- **`engine.load()`를 `transcribe()`에서 분리** — 다운로드 구간과 전사 구간을 호출자가 구분해 표시.
+  ASREngine 프로토콜에 `load()` 추가(mock·groq는 no-op).
+- `transcribe_audio(..., on_phase=cb)`: start/convert/model/asr/diarize/merge 단계 통지.
+  `start`에 engine·device·model·duration(ffprobe)·repo_id·cached를 실어 보냄. CLI 동작은 그대로.
+- 서버: job에 phase/phase_since/engine/device/duration/eta·dl_mb 추가, `ep_jobs`가 **경과 시간을
+  서버 시계로 계산**(브라우저 시계 어긋남 방지). 미캐시 모델이면 캐시 폴더 크기를 2초마다 재는
+  감시 스레드로 진행률 표시(huggingface_hub이 콜백을 안 줌).
+- 대시보드: 단계별 경과·전체 경과·다운로드 진행바·`faster-whisper large-v3 · CPU · 녹음 19분 ·
+  전사 예상 15분~49분 · 화자분리 꺼짐` 한 줄. 폴링 3s→2s.
+- pytest 115개. 예상 시간은 **범위**로만 준다(하드웨어 편차가 커서 단일값은 거짓말이 됨).
 
 ### 브랜치 단일화 (2026-08, 완료)
 - **이제 브랜치는 `main` 하나뿐이다.** 기본 브랜치도 `main`.

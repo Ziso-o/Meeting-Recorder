@@ -392,10 +392,15 @@ def _job_set(job_id: str, **fields: Any) -> None:
 def _job_add(audio: Path, profile: str, title: str) -> str:
     job_id = uuid.uuid4().hex[:12]
     with _JLOCK:
+        now = time.time()
         _JOBS[job_id] = {
             "id": job_id, "name": audio.name, "audio": _rel(audio), "profile": profile,
             "title": title, "status": "queued", "step": "차례를 기다리는 중",
-            "since": time.time(), "stem": "", "error": "", "segments": 0,
+            "since": now, "stem": "", "error": "", "segments": 0,
+            # 진행 가시성: 어떤 단계인지 · 무엇으로 도는지 · 얼마나 걸릴지
+            "phase": "", "phase_since": now, "engine": "", "device": "",
+            "diarizer": "", "duration": 0.0, "eta_lo": 0.0, "eta_hi": 0.0,
+            "dl_mb": 0.0, "dl_total_mb": 0,
         }
         if len(_JOBS) > _JOBS_KEEP:  # 끝난 것부터 오래된 순으로 정리
             done = [(j["since"], k) for k, j in _JOBS.items()
@@ -405,25 +410,86 @@ def _job_add(audio: Path, profile: str, title: str) -> str:
     return job_id
 
 
+def _model_total_mb(model_size: str) -> int:
+    from .asr.info import expected_model_mb
+
+    return expected_model_mb(model_size)
+
+
+def _phase_step(key: str, info: dict) -> str:
+    """단계 키 → 대시보드에 보일 문구."""
+    return {
+        "convert": "오디오 변환 중 (ffmpeg)",
+        "model": "모델 여는 중",
+        "asr": "전사하는 중 (오디오 → 화자별 텍스트)",
+        "diarize": "화자 나누는 중" if info.get("diarizer", "off") != "off" else "정리하는 중",
+        "merge": "문장 정리하는 중",
+    }.get(key, key)
+
+
+def _watch_download(job_id: str, repo_id: str, total_mb: int, stop: threading.Event) -> None:
+    """모델을 받는 동안 캐시 폴더 크기를 재서 진행률을 보여준다.
+
+    huggingface_hub 이 진행률을 콜백으로 주지 않아 폴더 크기로 갈음한다.
+    정확한 수치가 목적이 아니라 **멈춘 게 아니라는 신호**가 목적이다.
+    """
+    from .asr.info import dir_size_mb, model_cache_path
+
+    path = model_cache_path(repo_id)
+    while not stop.wait(2.0):
+        mb = dir_size_mb(path)
+        _job_set(job_id, dl_mb=round(mb, 1), dl_total_mb=total_mb,
+                 step=f"모델 받는 중 · {mb:,.0f} / 약 {total_mb:,}MB (처음 한 번만)")
+
+
 def run_audio_job(job_id: str, glossary_path: str = "glossary.yaml") -> dict:
     """작업 1건을 **동기로** 수행한다(백그라운드 스레드 / 테스트 공용)."""
+    from .asr.info import estimate_range_sec
     from .transcribe import transcribe_audio
 
     with _JLOCK:
         job = dict(_JOBS[job_id])
     audio = (_data_dir() / job["audio"]).resolve()
     profile = job["profile"]
+    dl_stop = threading.Event()
+    facts: dict = {}
+
+    def on_phase(key: str, info: dict) -> None:
+        if key == "start":
+            facts.update(info)
+            eta = estimate_range_sec(
+                float(info.get("duration") or 0), str(info.get("model") or ""),
+                str(info.get("device") or "cpu"),
+            ) or (0.0, 0.0)
+            _job_set(job_id, engine=info.get("description", ""), device=info.get("device", ""),
+                     diarizer=info.get("diarizer", ""), duration=info.get("duration", 0.0),
+                     eta_lo=eta[0], eta_hi=eta[1])
+            return
+        if key == "model" and not facts.get("cached", True):
+            total = _model_total_mb(str(facts.get("model") or ""))
+            _job_set(job_id, phase=key, phase_since=time.time(),
+                     step=f"모델 받는 중 · 약 {total:,}MB (처음 한 번만)", dl_total_mb=total)
+            threading.Thread(target=_watch_download, daemon=True,
+                             args=(job_id, facts.get("repo_id", ""), total, dl_stop)).start()
+            return
+        if key == "asr":
+            dl_stop.set()  # 다운로드 감시 종료
+        _job_set(job_id, phase=key, phase_since=time.time(), step=_phase_step(key, facts))
+
     try:
         if not _RUN_LOCK.acquire(blocking=False):
             _job_set(job_id, step="앞 회의록이 끝나기를 기다리는 중")
             _RUN_LOCK.acquire()
         try:
-            _job_set(job_id, status="running", step="전사하는 중 (오디오 → 화자별 텍스트)")
-            segments = transcribe_audio(audio, glossary_path)
+            _job_set(job_id, status="running", phase="start", phase_since=time.time(),
+                     step="준비하는 중")
+            segments = transcribe_audio(audio, glossary_path, on_phase=on_phase)
         finally:
+            dl_stop.set()
             _RUN_LOCK.release()
 
-        _job_set(job_id, step="회의록을 쓰는 중 (LLM)", segments=len(segments))
+        _job_set(job_id, phase="llm", phase_since=time.time(),
+                 step="회의록을 쓰는 중 (LLM)", segments=len(segments))
         glossary = load_glossary(glossary_path)
         meta = {"meeting_title": job["title"], "date": "", "source_audio": audio.name}
         minutes = generate_minutes(
@@ -433,11 +499,12 @@ def run_audio_job(job_id: str, glossary_path: str = "glossary.yaml") -> dict:
         stem = str(_data_dir() / "out" / profile / audio.stem)
         _write(stem, meta, segments, minutes)
         res = _result(stem, segments, minutes)
-        _job_set(job_id, status="done", step="회의록 완료", stem=stem,
+        _job_set(job_id, status="done", phase="done", step="회의록 완료", stem=stem,
                  minutes_path=_rel(Path(stem + ".minutes.md")))
         return res
     except Exception as e:  # noqa: BLE001  실패도 값으로 남겨 대시보드가 이유를 보여준다
-        _job_set(job_id, status="failed", step="실패", error=str(e))
+        dl_stop.set()
+        _job_set(job_id, status="failed", phase="failed", step="실패", error=str(e))
         return {"ok": False, "error": str(e)}
 
 
@@ -457,9 +524,15 @@ def ep_audio_process(body: dict) -> dict:
 
 
 def ep_jobs(_p: dict) -> dict:
+    """작업 목록 + 경과 시간(초). 경과는 서버 시계로 계산해 브라우저와 어긋나지 않게 한다."""
+    now = time.time()
     with _JLOCK:
         jobs = sorted(_JOBS.values(), key=lambda j: j["since"], reverse=True)
-        return {"ok": True, "jobs": [dict(j) for j in jobs]}
+        return {"ok": True, "jobs": [
+            {**j, "elapsed": int(now - j["since"]),
+             "phase_elapsed": int(now - j.get("phase_since", j["since"]))}
+            for j in jobs
+        ]}
 
 
 def upload_audio(name: str, reader, length: int, profile: str = "secure",

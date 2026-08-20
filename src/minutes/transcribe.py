@@ -17,10 +17,12 @@ import argparse
 import json
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from .asr import merge_segments, select_asr_engine, select_diarizer
-from .asr.audio import to_wav_16k_mono
+from .asr.audio import probe_duration_sec, to_wav_16k_mono
+from .asr.info import asr_device, describe_engine, is_model_cached, whisper_repo_id
 from .config import load_dotenv
 from .glossary import glossary_terms, load_glossary
 from .schema import Segment
@@ -30,29 +32,63 @@ def transcribe_audio(
     audio: str | Path,
     glossary_path: str | Path = "glossary.yaml",
     keep_wav: bool = False,
+    on_phase: Callable[[str, dict], None] | None = None,
 ) -> list[Segment]:
     """오디오 → 화자 라벨 세그먼트(Phase 1 입력 스키마). 파이프라인/CLI 공용.
 
     엔진/화자분리기 선택은 환경변수(ASR_ENGINE, DIARIZER)를 따른다.
+
+    on_phase(key, info): 단계가 바뀔 때마다 불린다. 호출자(대시보드)가
+      "모델 받는 중"과 "전사 중"을 구분해 보여주기 위한 것.
+      key = start | convert | model | asr | diarize | merge
+      info = 그 단계에서 알게 된 사실(engine/device/model/duration 등)
     """
     audio = Path(audio)
     glossary = load_glossary(glossary_path)
     initial_prompt = glossary_terms(glossary)
 
+    def phase(key: str, **info: object) -> None:
+        if on_phase is not None:
+            on_phase(key, info)
+
     engine = select_asr_engine()
     diarizer = select_diarizer()
     print(f"ASR={engine.name}, diarizer={diarizer.name if diarizer else 'off'}")
+
+    model_size = getattr(engine, "model_size", "")
+    phase(
+        "start",
+        engine=engine.name,
+        model=model_size,
+        device=asr_device() if engine.name == "faster-whisper" else "",
+        diarizer=diarizer.name if diarizer else "off",
+        description=describe_engine(engine),
+        duration=probe_duration_sec(audio) if audio.exists() else 0.0,
+        repo_id=whisper_repo_id(model_size) if model_size else "",
+        cached=is_model_cached(whisper_repo_id(model_size)) if model_size else True,
+    )
 
     if engine.name == "mock":
         wav = str(audio)
         wav_to_clean = None
     else:
+        phase("convert")
         wav = str(to_wav_16k_mono(audio))
         wav_to_clean = None if keep_wav else wav
 
     try:
+        # 모델 준비를 전사와 분리한다 — 첫 실행의 대용량 다운로드가 여기서 일어나고,
+        # 그 시간을 "전사 중"으로 뭉뚱그리면 멈춘 것처럼 보인다.
+        phase("model")
+        engine.load()
+
+        phase("asr")
         asr_segments = engine.transcribe(wav, initial_prompt=initial_prompt)
+
+        phase("diarize")
         turns = diarizer.diarize(wav) if diarizer else []
+
+        phase("merge")
         return merge_segments(asr_segments, turns)
     finally:
         if wav_to_clean and Path(wav_to_clean).exists():

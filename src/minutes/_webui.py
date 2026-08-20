@@ -455,21 +455,45 @@ async function runAudio(ev){ev.stopPropagation();
 /* 처리 진행 상황 — 진행 중인 작업이 있을 때만 폴링 */
 const JSTAT={queued:['차례를 기다리는 중','var(--sub)'],running:['진행 중','var(--pri)'],
  done:['회의록 완료','var(--ok)'],failed:['실패','var(--danger)']};
+/* 초 → "3분 12초" / "1시간 4분". 오래 걸리는 작업이라 시:분:초는 과하다. */
+function fmtDur(sec){sec=Math.max(0,Math.round(sec||0));
+ const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;
+ if(h)return h+'시간 '+m+'분';
+ if(m>=10||!s)return m?m+'분':s+'초';   // 길어지면 초는 노이즈
+ if(m)return m+'분 '+s+'초'; return s+'초';}
+/* 진행바 — 모델 다운로드처럼 총량을 아는 단계에서만 띄운다. */
+function dlBar(j){if(!j.dl_total_mb||!j.dl_mb)return '';
+ const pct=Math.min(100,Math.round(j.dl_mb/j.dl_total_mb*100));
+ return '<div class="bar" style="margin-top:8px;height:6px"><i style="width:'+pct+'%"></i></div>';}
+/* 왜 오래 걸리는지 한 줄로 — 엔진·디바이스·녹음 길이·예상 시간 */
+function jobWhy(j){const bits=[];
+ if(j.engine)bits.push(esc(j.engine));
+ if(j.duration)bits.push('녹음 '+fmtDur(j.duration));
+ if(j.eta_hi&&j.phase!=='done'&&j.status!=='done')
+  bits.push('전사 예상 '+fmtDur(j.eta_lo)+'~'+fmtDur(j.eta_hi));
+ if(j.diarizer==='off')bits.push('화자분리 꺼짐');
+ return bits.length?'<div class="fmeta" style="margin-top:3px">'+bits.join(' · ')+'</div>':'';}
 let jobTimer=null;
 async function loadJobs(){let d; try{d=await jget('/api/jobs');}catch(e){return;}
  const rows=d.jobs||[],card=$('jobCard');
  if(!rows.length){card.style.display='none';}
  else{card.style.display='';
   $('jobList').innerHTML=rows.map(j=>{const st=JSTAT[j.status]||[j.status,'var(--sub)'];
-   return '<div class="fitem" style="cursor:default"><div class="fic" style="background:var(--warn-soft)">'+
+   const run=j.status==='running'||j.status==='queued';
+   return '<div class="fitem" style="cursor:default;align-items:flex-start"><div class="fic" style="background:var(--warn-soft);margin-top:2px">'+
     (j.status==='running'?'<span class="spin" style="border-color:rgba(125,125,125,.3);border-top-color:var(--pri)"></span>':'🎧')+'</div>'+
     '<div style="flex:1;min-width:0"><div class="fname">'+esc(j.name)+'</div>'+
     '<div class="fmeta" style="color:'+st[1]+'">'+esc(j.step||st[0])+
-     (j.segments?(' · 세그먼트 '+j.segments):'')+(j.error?(' — '+esc(j.error)):'')+'</div></div>'+
+     (run&&j.phase_elapsed?(' · '+fmtDur(j.phase_elapsed)+'째'):'')+
+     (j.segments?(' · 세그먼트 '+j.segments):'')+(j.error?(' — '+esc(j.error)):'')+'</div>'+
+    jobWhy(j)+dlBar(j)+
+    (j.elapsed?('<div class="fmeta" style="margin-top:3px;opacity:.75">전체 '+fmtDur(j.elapsed)+' 경과</div>'):'')+
+    '</div>'+
     (j.status==='done'?'<button class="btn pri sm" onclick="go(\'minutes\')">회의록 보기</button>':'')+
     '</div>';}).join('');}
  const active=rows.some(j=>j.status==='queued'||j.status==='running');
- if(active&&!jobTimer)jobTimer=setInterval(loadJobs,3000);
+ /* 진행 중에는 촘촘히(경과 시간이 흘러야 살아 있다는 게 보인다) */
+ if(active&&!jobTimer)jobTimer=setInterval(loadJobs,2000);
  if(!active&&jobTimer){clearInterval(jobTimer);jobTimer=null;refreshBadges();}}
 
 /* 마크다운 렌더 */
