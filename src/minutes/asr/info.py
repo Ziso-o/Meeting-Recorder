@@ -182,6 +182,16 @@ def cuda_dll_dirs() -> list[Path]:
     return found
 
 
+def quiet_hf_symlink_warning() -> None:
+    """Windows 의 huggingface_hub symlink 경고를 끈다(사용자가 정하지 않았을 때만).
+
+    개발자 모드가 아니면 심볼릭 링크를 못 써서 캐시 파일이 복제된다 — **동작에는
+    문제가 없고 디스크만 더 쓴다**. 매 다운로드마다 열 줄씩 찍혀 진짜 오류를 가리므로
+    기본으로 끈다. 디스크 사용량은 check_env.py 가 캐시 크기로 보여준다.
+    """
+    os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+
+
 def register_cuda_dlls() -> list[Path]:
     """찾은 DLL 폴더를 이 프로세스에 등록한다(Windows 전용, 반환=등록된 폴더)."""
     if os.name != "nt":

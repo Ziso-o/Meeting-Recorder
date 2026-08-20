@@ -334,3 +334,14 @@ def test_device_can_be_forced(monkeypatch):
     from minutes.asr import select_asr_engine
 
     assert select_asr_engine().device == "cpu"
+
+
+def test_hf_symlink_warning_quieted_but_overridable(monkeypatch):
+    """무해한 Windows 경고가 진짜 오류를 가리지 않게 끄되, 사용자 설정은 존중한다."""
+    monkeypatch.delenv("HF_HUB_DISABLE_SYMLINKS_WARNING", raising=False)
+    info.quiet_hf_symlink_warning()
+    assert info.os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] == "1"
+
+    monkeypatch.setenv("HF_HUB_DISABLE_SYMLINKS_WARNING", "0")
+    info.quiet_hf_symlink_warning()
+    assert info.os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] == "0"   # 덮어쓰지 않음

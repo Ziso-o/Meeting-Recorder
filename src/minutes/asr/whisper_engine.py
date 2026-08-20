@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from .base import ASRSegment
-from .info import CUDA_HELP, asr_device, register_cuda_dlls
+from .info import CUDA_HELP, asr_device, quiet_hf_symlink_warning, register_cuda_dlls
 
 
 def _is_cuda_library_error(e: Exception) -> bool:
@@ -54,6 +54,7 @@ class FasterWhisperEngine:
 
             # pip 로 깔린 CUDA DLL 은 PATH 에 없다 — 여기서 찾아 등록한다.
             register_cuda_dlls()
+            quiet_hf_symlink_warning()   # 무해한 Windows 경고가 진짜 오류를 가리지 않게
             try:
                 self._model = WhisperModel(
                     self.model_size, device=self.device, compute_type=self.compute_type,

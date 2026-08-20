@@ -205,6 +205,11 @@ def main() -> int:
             print("      해결: uv pip install nvidia-cublas-cu12 nvidia-cudnn-cu12")
 
     head("Whisper 모델 (받아졌는지 · 캐시됐는지)")
+    from minutes.asr.info import dir_size_mb, hf_cache_home
+
+    cache_mb = dir_size_mb(hf_cache_home())
+    if cache_mb:
+        print(f"  캐시 폴더 {hf_cache_home()}  ({cache_mb:,.0f} MB 사용 중)")
     for repo, short, note, reachable, cached in model_availability():
         mark = OK if reachable else (NO if reachable is False else WARN)
         print(f"  {mark} {short:22s} {'[캐시됨]' if cached else '        '} {note}")
