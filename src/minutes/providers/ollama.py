@@ -6,6 +6,7 @@ httpx는 지연 임포트하여 테스트(mock 사용)에서는 불필요하게 
 
 from __future__ import annotations
 
+import json
 import os
 import time
 
@@ -26,7 +27,14 @@ class OllamaProvider:
             os.environ.get("OLLAMA_TIMEOUT", "1800")
         )
         self.max_ctx = int(os.environ.get("OLLAMA_MAX_CTX", "16384"))
-        self.output_headroom = 1024
+        # 출력 상한. 없으면 소형 모델이 반복 생성으로 컨텍스트를 다 채울 때까지 안 멈춘다.
+        self.num_predict = int(os.environ.get("OLLAMA_NUM_PREDICT", "2048"))
+        # 토큰이 이 시간 동안 안 오면 죽은 것으로 본다(전체 타임아웃과 별개).
+        self.stall_timeout = float(os.environ.get("OLLAMA_STALL_TIMEOUT", "180"))
+        self.keep_alive = os.environ.get("OLLAMA_KEEP_ALIVE", "10m")
+        # 소형 모델은 같은 문구를 반복하기 쉽다 — 기본(1.1)보다 조금 세게.
+        self.repeat_penalty = float(os.environ.get("OLLAMA_REPEAT_PENALTY", "1.15"))
+        self.output_headroom = self.num_predict
 
     def context_size(self, prompt: str) -> int:
         """이 프롬프트에 필요한 컨텍스트 크기(토큰).
@@ -44,6 +52,12 @@ class OllamaProvider:
         return self.max_ctx
 
     def generate(self, prompt: str, *, system: str | None = None) -> str:
+        """생성. **스트리밍**으로 받아 토큰이 끊기는 순간을 바로 잡아낸다.
+
+        통짜 요청(stream=False)이면 모델이 같은 말을 반복하며 폭주해도 타임아웃까지
+        아무것도 알 수 없다. 스트리밍이면 토큰 간 간격으로 '죽었는지'를 수 초 안에
+        판단할 수 있고, 얼마나 생성했는지도 오류 메시지에 담을 수 있다.
+        """
         import httpx  # 지연 임포트
 
         num_ctx = self.context_size(prompt)
@@ -54,26 +68,75 @@ class OllamaProvider:
         payload: dict = {
             "model": self.model,
             "prompt": prompt,
-            "stream": False,
-            "options": {"temperature": 0.2, "num_ctx": num_ctx},
+            "stream": True,
+            "keep_alive": self.keep_alive,   # 청크 사이에 모델을 다시 올리지 않게
+            "options": {
+                "temperature": 0.2,
+                "num_ctx": num_ctx,
+                # 출력 상한 — 없으면 소형 모델이 같은 말을 반복하며 컨텍스트를 다 채운다.
+                "num_predict": self.num_predict,
+                "repeat_penalty": self.repeat_penalty,
+            },
         }
         if system:
             payload["system"] = system
 
         started = time.monotonic()
+        parts: list[str] = []
+        tokens = 0
+        done_reason = ""
+        # read 타임아웃은 **토큰 사이** 간격에 걸린다 — 멈춘 모델을 수 초 안에 잡는다.
+        timeout = httpx.Timeout(
+            connect=15.0, read=self.stall_timeout, write=60.0, pool=15.0
+        )
         try:
-            resp = httpx.post(f"{self.host}/api/generate", json=payload, timeout=self.timeout)
-            resp.raise_for_status()
+            with httpx.stream(
+                "POST", f"{self.host}/api/generate", json=payload, timeout=timeout
+            ) as resp:
+                resp.raise_for_status()
+                for line in resp.iter_lines():
+                    if not line:
+                        continue
+                    obj = json.loads(line)
+                    if obj.get("error"):
+                        raise RuntimeError(f"Ollama 오류: {obj['error']}")
+                    piece = obj.get("response", "")
+                    if piece:
+                        parts.append(piece)
+                        tokens += 1
+                    if obj.get("done"):
+                        done_reason = str(obj.get("done_reason") or "")
+                        break
+                    if time.monotonic() - started > self.timeout:
+                        raise TimeoutError(self._slow_message(prompt, started, tokens))
         except httpx.TimeoutException as e:
-            # "timed out" 한 줄로는 무엇을 어떻게 고쳐야 할지 알 수 없다.
-            raise TimeoutError(
-                f"Ollama 응답이 {time.monotonic() - started:.0f}초 안에 오지 않았어요"
-                f" (model={self.model}, host={self.host}, 입력 {len(prompt):,}자).\n"
-                f"  · 더 작은 모델을 쓰세요: OLLAMA_MODEL=qwen2.5:7b (CPU면 3b)\n"
-                f"  · 기다릴 수 있으면 OLLAMA_TIMEOUT을 늘리세요(현재 {self.timeout:.0f}초)"
-            ) from e
+            raise TimeoutError(self._slow_message(prompt, started, tokens)) from e
         except httpx.HTTPError as e:
             raise RuntimeError(
                 f"Ollama 호출 실패 (model={self.model}, host={self.host}): {e}"
             ) from e
-        return resp.json().get("response", "")
+
+        if done_reason == "length":
+            # 조용히 잘린 채로 넘어가면 회의록 뒷부분이 사라진다 — 보이게 한다.
+            print(f"  경고: 출력이 상한({self.num_predict} 토큰)에 걸려 잘렸습니다."
+                  " OLLAMA_NUM_PREDICT 를 늘리거나 MINUTES_CHUNK_CHARS 를 줄이세요.")
+        elapsed = time.monotonic() - started
+        print(f"  LLM {self.model}: {tokens:,}토큰 / {elapsed:.0f}초"
+              f" ({tokens / max(elapsed, 1):.1f} tok/s)")
+        return "".join(parts)
+
+    def _slow_message(self, prompt: str, started: float, tokens: int) -> str:
+        """왜 실패했는지 구분해서 알려준다 — 폭주와 무응답은 대처가 다르다."""
+        elapsed = time.monotonic() - started
+        head = (f"Ollama 응답이 {elapsed:.0f}초 안에 끝나지 않았어요"
+                f" (model={self.model}, 입력 {len(prompt):,}자, 생성 {tokens:,}토큰).")
+        if tokens > self.num_predict * 0.8:
+            why = ("  · 모델이 같은 말을 반복하며 계속 생성 중일 수 있어요"
+                   f" — OLLAMA_NUM_PREDICT({self.num_predict})를 줄여 보세요")
+        elif tokens == 0:
+            why = ("  · 토큰이 하나도 안 나왔어요 — 모델 로딩 중이거나 메모리가 부족합니다."
+                   " 작업 관리자에서 여유 RAM을 확인하세요(`wsl --shutdown`으로 확보 가능)")
+        else:
+            why = f"  · 그냥 느립니다 — 더 작은 모델({self.model} → qwen2.5:3b)을 쓰세요"
+        return (f"{head}\n{why}\n"
+                f"  · 기다릴 수 있으면 OLLAMA_TIMEOUT을 늘리세요(현재 {self.timeout:.0f}초)")

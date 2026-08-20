@@ -231,22 +231,9 @@ def test_progress_callback_fills_label_and_remaining(home, monkeypatch):
     assert any("/" in f["prog_label"] and ":" not in f["prog_label"] for f in seen)
 
 
-# ---- Ollama 오류 메시지 ----------------------------------------------------
-
-def test_ollama_timeout_message_is_actionable(monkeypatch):
-    """'timed out' 한 줄로는 무엇을 고칠지 알 수 없다."""
-    import httpx
-
-    from minutes.providers.ollama import OllamaProvider
-
-    monkeypatch.setattr(httpx, "post",
-                        lambda *a, **k: (_ for _ in ()).throw(httpx.ReadTimeout("timed out")))
-    p = OllamaProvider(model="qwen2.5:14b", timeout=600)
-    with pytest.raises(TimeoutError) as ei:
-        p.generate("프롬프트")
-    msg = str(ei.value)
-    assert "qwen2.5:14b" in msg and "OLLAMA_MODEL" in msg and "OLLAMA_TIMEOUT" in msg
-
+# ---- Ollama 설정 -----------------------------------------------------------
+# 스트리밍 동작(폭주 차단·무응답 감지·잘림 경고)은 tests/test_ollama_stream.py 에서
+# 실제 HTTP 서버로 검증한다.
 
 def test_ollama_timeout_is_configurable(monkeypatch):
     from minutes.providers.ollama import OllamaProvider
@@ -278,27 +265,6 @@ def test_context_cap_is_configurable(monkeypatch):
 
     monkeypatch.setenv("OLLAMA_MAX_CTX", "8192")
     assert OllamaProvider().context_size("가" * 50000) == 8192
-
-
-def test_num_ctx_is_sent_to_ollama(monkeypatch):
-    """옵션이 실제 요청에 실려야 의미가 있다."""
-    import httpx
-
-    from minutes.providers.ollama import OllamaProvider
-
-    sent: dict = {}
-
-    class Resp:
-        def raise_for_status(self): return None
-        def json(self): return {"response": "요약함"}
-
-    def fake_post(url, json=None, timeout=None):
-        sent.update(json or {})
-        return Resp()
-
-    monkeypatch.setattr(httpx, "post", fake_post)
-    OllamaProvider().generate("가" * 3000)
-    assert sent["options"]["num_ctx"] == 8192
 
 
 # ---- 청크 크기 · 부분 실패 ---------------------------------------------------
