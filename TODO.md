@@ -13,8 +13,9 @@
 
 ## ★ 세션 핸드오프 반영 (Cowork → 이 브랜치) — 최우선 정합성
 
-> `SESSION_HANDOFF.md` 기준. Cowork 로컬 `main`(커밋 `2a47d4c`, 미push)과 GitHub
-> 브랜치 `claude/meeting-minutes-automation-07augh`는 **별개 계보**다. 아래를 정합화한다.
+> `SESSION_HANDOFF.md` 기준. Cowork 로컬 `main`(커밋 `2a47d4c`)과 GitHub 작업 브랜치가
+> **별개 계보**였던 건을 정합화한 기록이다.
+> **2026-08 종결**: 브랜치를 `main` 하나로 통합하고 나머지는 삭제 — 아래 항목은 전부 완료.
 
 - [x] **`.env` 인라인 주석 파서 해결** — `_parse_env_value()`(`config.py`) + 테스트.
       (핸드오프 함정: `OLLAMA_MODEL`/`ASR_ENGINE` 값 뒤 `#` 오염 → 해결)
@@ -26,7 +27,8 @@
       (token=/use_auth_token 폴백, soundfile 인메모리(torchcodec 우회), DiarizeOutput
       `.speaker_diarization`, torchcodec 경고필터). lazy import 유지 → mock 테스트 정상.
 - [x] **계보 정합 결정: 브랜치를 정본으로 단일화**(로컬 `main` 2a47d4c 폐기).
-      → 남은 것: 사용자 로컬 저장소를 이 브랜치로 정렬(아래 참고).
+- [x] **브랜치 단일화 실행(2026-08)** — 작업 계보를 `main`으로 강제 갱신, 기본 브랜치 `main`,
+      `claude/*` 2개 삭제. 기존 클론은 `git fetch --prune && git checkout main && git reset --hard origin/main`.
 
 ---
 

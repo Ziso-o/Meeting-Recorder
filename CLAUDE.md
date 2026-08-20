@@ -137,6 +137,7 @@ Meeting-Recorder/
   **`minutes.watch`**(폴더감시 자동 회의록, `--once` 크론모드), **`diarize.py` Windows 수정 4종**
   (token=/use_auth_token 폴백, soundfile 인메모리 torchcodec 우회, DiarizeOutput, 경고필터). pytest 36개.
 - **계보: 이 브랜치가 정본**(로컬 `main` 2a47d4c 폐기 방침). Cowork 로컬 변경분 반영 완료.
+  → **2026-08 실행 완료**: 아래 '브랜치 단일화' 참고.
 - 무인 자동화는 **watch(1차, Docker 불필요)** → n8n은 **네이티브**(Docker 금지 정책).
 
 ### n8n 연동은 HTTP 방식 (2026-07, executeCommand 회피)
@@ -161,7 +162,15 @@ Meeting-Recorder/
 - **작업 큐**: 업로드 즉시 응답하고 전사→회의록은 백그라운드 스레드(`_JOBS`), 진행상황은 `GET /api/jobs` 폴링.
   `auto=1` → `data/uploads/audio/`(서버가 처리) / `auto=0` → `data/incoming/`(외부 `minutes.watch`가 처리) — **폴더를 갈라 중복 처리 방지**.
 - `POST /api/audio/process`로 기존 녹음본 재처리. 파일 목록/삭제/이름변경에 `audio` 종류 추가(확장자 보존).
-- pytest 100개 통과(HTTP 소켓 레벨 테스트 포함). 브라우저(Playwright)로 업로드→회의록 UI 경로까지 확인.
+- pytest 102개 통과(HTTP 소켓 레벨 테스트 포함). 브라우저(Playwright)로 업로드→회의록 UI 경로까지 확인.
+
+### 브랜치 단일화 (2026-08, 완료)
+- **이제 브랜치는 `main` 하나뿐이다.** 기본 브랜치도 `main`.
+- `main`을 작업 계보(`claude/clova-note-recording-support-1kna7y`, 51커밋)로 강제 갱신하고
+  옛 `main`(2a47d4c, Cowork 스냅샷)은 폐기 — 고유 파일 0개라 유실 없음.
+- `claude/meeting-minutes-automation-07augh` · `claude/clova-note-recording-support-1kna7y` 삭제됨
+  (전자는 후자에 완전히 포함, 후자는 `main`과 동일 커밋).
+- 앞으로 작업 브랜치는 `main`에서 딴다. 문서의 clone/pull 예시도 `main` 기준으로 갱신됨.
 
 ### 개발 환경 메모
 - `uv venv && uv pip install -e ".[dev]"` 후 `python -m minutes.generate` 사용(‑e 설치 필요).

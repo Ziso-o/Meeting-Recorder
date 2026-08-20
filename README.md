@@ -36,7 +36,7 @@ Phase 1–4 + **웹 대시보드**(자동 회의록 · 봇 이름 지정 · 파�
 
 ```bash
 # ── 코드 받기(최초) ─────────────────────────────────────────
-git clone -b claude/meeting-minutes-automation-07augh https://github.com/Ziso-o/Meeting-Recorder.git
+git clone https://github.com/Ziso-o/Meeting-Recorder.git    # 기본 브랜치 = main
 cd Meeting-Recorder
 
 # ── 셋업 (택1, 자동) ────────────────────────────────────────
@@ -46,11 +46,17 @@ bash scripts/run_local.sh --setup-only   # uv 없어도 python -m venv 폴백
 # ── 수동 설치 ───────────────────────────────────────────────
 uv venv && uv pip install -e ".[transcribe]"    # uv 없으면 python -m venv .venv 후
 #   .venv/Scripts/python -m pip install -e ".[transcribe]"   (Windows / Linux는 .venv/bin/python)
-.venv/Scripts/python -m pytest -q               # 73 passed 확인
+.venv/Scripts/python -m pytest -q               # 102 passed 확인
 ```
 
 > `[transcribe]` = torch/faster-whisper/pyannote(**파일 전사**용, 무거움). Vexa 봇만이면 `[dev]`로 충분.
 > 파일 전사엔 **ffmpeg** 필요(`winget install Gyan.FFmpeg` / `apt install ffmpeg`).
+
+> **이미 `claude/…` 브랜치로 클론해 둔 PC라면** 브랜치가 `main` 하나로 통합·정리됐으니 한 번만 옮겨 두세요.
+> 작업 계보는 그대로라 커밋 손실은 없습니다.
+> ```bash
+> git fetch origin --prune && git checkout main && git reset --hard origin/main
+> ```
 
 ## 2. 설정 (`.env`)
 
@@ -87,7 +93,7 @@ Vexa 설치가 끝난 PC라면 배치 하나로 **Docker → STT → Vexa → �
 
 ### B. 수동 — 대시보드만 (Vexa는 이미 떠 있을 때)
 ```bash
-git pull origin claude/meeting-minutes-automation-07augh
+git pull origin main
 .venv/Scripts/python -m minutes.server        # → http://127.0.0.1:8900/   (Linux·mac: .venv/bin/python)
 ```
 > - venv 활성화 안 하면 `No module named 'minutes'` → `.venv/Scripts/python` 로 명시.
@@ -170,7 +176,7 @@ curl -X POST http://localhost:5678/webhook/bot-dispatch -H "Content-Type: applic
 ## 6. 개발 / 구조 / 문서
 
 ```bash
-python -m pytest -q                     # 100개 (mock으로 네트워크·GPU·오디오 없이 e2e)
+python -m pytest -q                     # 102개 (mock으로 네트워크·GPU·오디오 없이 e2e)
 python -m ruff check src tests scripts  # 린트
 ```
 > `prompts/*.md`와 `glossary.yaml`은 **실제 회의 결과를 보며 사람이 직접 튜닝**한다 — 이게 진짜 IP.
