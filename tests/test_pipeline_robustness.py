@@ -92,7 +92,7 @@ class _BoomProvider:
     def __init__(self):
         self.calls = 0
 
-    def generate(self, prompt: str, *, system: str | None = None) -> str:
+    def generate(self, prompt: str, *, system=None, max_tokens=None) -> str:
         self.calls += 1
         raise TimeoutError("Ollama 응답이 오지 않았어요")
 
@@ -123,7 +123,7 @@ def test_term_correction_is_chunked(monkeypatch):
     class P:
         name = "spy"
 
-        def generate(self, prompt, *, system=None):
+        def generate(self, prompt, *, system=None, max_tokens=None):
             seen.append(len(prompt))
             return "[]"   # 개수 불일치 → 원문 유지 경로
 
@@ -296,7 +296,7 @@ def test_one_failing_chunk_does_not_kill_the_job():
         def __init__(self):
             self.n = 0
 
-        def generate(self, prompt, *, system=None):
+        def generate(self, prompt, *, system=None, max_tokens=None):
             self.n += 1
             if self.n == 2:
                 raise TimeoutError("두 번째 구간에서 타임아웃")

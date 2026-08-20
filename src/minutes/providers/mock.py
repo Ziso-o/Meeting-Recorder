@@ -28,7 +28,9 @@ class MockProvider:
         m = re.search(r"<!--\s*stage:\s*(\w+)\s*-->", prompt)
         return m.group(1) if m else "unknown"
 
-    def generate(self, prompt: str, *, system: str | None = None) -> str:
+    def generate(
+        self, prompt: str, *, system: str | None = None, max_tokens: int | None = None
+    ) -> str:
         stage = self._stage(prompt)
         self.calls.append(stage)
 

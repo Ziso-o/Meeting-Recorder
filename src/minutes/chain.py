@@ -24,6 +24,15 @@ PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
 #: on_progress(stage, done, total) — stage: terms | summary | integrate
 Progress = Callable[[str, int, int], None]
 
+#: 단계별 출력 상한(토큰). **요약이 입력만큼 길면 요약이 아니다** — 소형 로컬 모델은
+#: 길이 제약을 흘리기 쉬워서 프롬프트뿐 아니라 여기서도 막는다.
+#: CPU에서 출력 길이는 곧 시간이다(3.9 tok/s면 2000토큰 = 8분, 500토큰 = 2분).
+MAX_TOKENS = {
+    "terms": int(os.environ.get("LLM_MAX_TOKENS_TERMS", "2048")),      # 원문 재출력이라 길다
+    "summary": int(os.environ.get("LLM_MAX_TOKENS_SUMMARY", "600")),   # 구간 요약은 짧아야
+    "integrate": int(os.environ.get("LLM_MAX_TOKENS_INTEGRATE", "2048")),  # 회의록 JSON
+}
+
 
 def _noop(stage: str, done: int, total: int) -> None:
     return None
@@ -86,7 +95,7 @@ def _correct_chunk(
         ),
     )
     try:
-        corrected = _extract_json(provider.generate(prompt))
+        corrected = _extract_json(provider.generate(prompt, max_tokens=MAX_TOKENS["terms"]))
         if isinstance(corrected, list) and len(corrected) == len(chunk):
             return [
                 seg.model_copy(update={"text": str(new_text)})
@@ -137,7 +146,9 @@ def summarize_chunks(
             CHUNK_TEXT=render_segments(chunk),
         )
         try:
-            summaries.append(provider.generate(prompt).strip())
+            summaries.append(
+                provider.generate(prompt, max_tokens=MAX_TOKENS["summary"]).strip()
+            )
         except Exception as e:  # noqa: BLE001  한 구간이 실패해도 회의록은 나와야 한다
             failures.append(f"{i}: {type(e).__name__}: {e}")
             print(f"  구간 {i}/{len(chunks)} 요약 실패 — 이 구간은 건너뜁니다: {e}")
@@ -176,7 +187,7 @@ def integrate(
                 f"\n\n## 재시도 안내\n직전 출력이 스키마 검증에 실패했다: {last_err}\n"
                 "설명 없이 스키마와 정확히 일치하는 순수 JSON만 다시 출력하라."
             )
-        raw = provider.generate(prompt)
+        raw = provider.generate(prompt, max_tokens=MAX_TOKENS["integrate"])
         try:
             data = _extract_json(raw)
             return Minutes.model_validate(data)

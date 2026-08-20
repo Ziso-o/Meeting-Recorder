@@ -165,3 +165,47 @@ def test_bench_script_survives_no_ollama():
     )
     assert out.returncode == 0, out.stderr[-1500:]
     assert "전원 모드" in out.stdout        # 느릴 때 확인할 것들을 안내
+
+
+def test_stage_max_tokens_overrides_default(server):
+    """단계마다 필요한 출력 길이가 다르다 — 구간 요약은 짧아야 한다."""
+    _FakeOllama.mode = "ok"
+    OllamaProvider(host=server).generate("가" * 2000, max_tokens=600)
+    assert _FakeOllama.seen["options"]["num_predict"] == 600
+    # 컨텍스트도 그만큼만 잡는다(작을수록 CPU에서 빠르다)
+    assert _FakeOllama.seen["options"]["num_ctx"] == 4096
+
+
+def test_chain_uses_short_cap_for_summaries(server):
+    """요약이 입력만큼 길면 요약이 아니다 — 체인이 짧은 상한을 넘겨야 한다."""
+    from minutes import chain
+
+    assert chain.MAX_TOKENS["summary"] < chain.MAX_TOKENS["integrate"]
+    assert chain.MAX_TOKENS["summary"] <= 800
+
+
+def test_summary_call_carries_short_cap():
+    from minutes import chain
+    from minutes.schema import Segment
+
+    seen: list[int | None] = []
+
+    class P:
+        name = "spy"
+
+        def generate(self, prompt, *, system=None, max_tokens=None):
+            seen.append(max_tokens)
+            return "요약함"
+
+    chain.summarize_chunks([Segment(speaker="S", start=0, end=5, text="발언")], "", P())
+    assert seen == [chain.MAX_TOKENS["summary"]]
+
+
+def test_prompt_constrains_summary_length():
+    """소형 모델은 코드 상한만으로는 부족하다 — 프롬프트에도 분량 제약이 있어야."""
+    from pathlib import Path
+
+    md = (Path(__file__).resolve().parent.parent / "prompts"
+          / "02_chunk_summary.md").read_text(encoding="utf-8")
+    assert "12줄" in md
+    assert "입력보다 반드시 짧아야" in md

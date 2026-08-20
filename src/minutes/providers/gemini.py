@@ -23,7 +23,9 @@ class GeminiProvider:
         self.model = model
         self.timeout = timeout
 
-    def generate(self, prompt: str, *, system: str | None = None) -> str:
+    def generate(
+        self, prompt: str, *, system: str | None = None, max_tokens: int | None = None
+    ) -> str:
         import httpx  # 지연 임포트
 
         url = (
@@ -32,7 +34,10 @@ class GeminiProvider:
         )
         body: dict = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.2},
+            "generationConfig": {
+                "temperature": 0.2,
+                **({"maxOutputTokens": max_tokens} if max_tokens else {}),
+            },
         }
         if system:
             body["systemInstruction"] = {"parts": [{"text": system}]}
